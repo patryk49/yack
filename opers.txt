@@ -1,0 +1,91 @@
+PREFIX OPERATORS
+	+           Plus
+	-           Minus
+	!           LogicNot
+	^           BitNot
+	*           Pointer
+	&           Address
+	[]          Span
+	[$sizes]    ArrayClass
+	($args) ->  ProcedureClass
+	($args) =>  ProcedureLiteral
+
+
+
+POSTFIX OPERATORS
+	'                           Dereference
+	.$field                     GetField
+	.[$index]                   GetFieldByIndex
+	[]                          Span
+	[$index/$range]             Subscript/Slice
+	($args)                     Call
+	.($args)                    GetProcedure
+	.{$values/$fields=$values}  Initialize
+	? ($on_true) ($on_false)    Conditional
+
+
+
+INFIX OPERATORS
+	=    Assign
+	<>=  ConcatAssign
+	%=   ModuloAssign
+	+=   AddAssign
+	-=   SubtractAssign
+	><=  CrossProductAssign
+	*=   MultiplyAssign
+	/=   DivideAssign
+	**=  PowerAssign
+	|=   BitOrAssign
+	&=   BitAndAssign
+	^=   BitXorAssign
+	<<=  ShiftLeftAssign
+	>>=  ShiftRightAssign
+
+	||   LogicOr
+	&&   LogicAnd
+	==   Equal
+	<    Less
+	>    Greater
+	@=   Contains
+	..   Range
+	<>   Concat
+
+	%    Modulo
+	+    Add
+	+%   ModuloAdd
+	+|   SaturateAdd
+	+@   ExpandedAdd
+	-    Subtract
+	-%   ModuloSubtract
+	-|   SaturateSubtract
+	-@   ExpandedSubtract
+	><   CrossProduct
+	*    Multiply
+	*%   ModuloMultiply
+	*|   SaturateMultiply
+	*@   ExpandedMultiply
+	/    Divide
+	/@   ExpandedDivide
+	**   Power
+
+	|    BitOr
+	*    BitAnd
+	^    BitXor
+	<<   ShiftLeft
+	>>   ShiftRight
+
+	~    Cast
+	~%~  Reinterpret
+	|>   Pipe
+
+
+array |> map(Int.LESS)
+
+map :: (iterable, proc) => ${
+	iter := iter(iterable)
+	proc := proc
+	advance :: (s: *@) -> {
+		{value, end} := advance(&s.iter)
+		return end ? {_, True} else {s.proc(value), False}
+	}
+}
