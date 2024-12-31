@@ -11,28 +11,40 @@ void print_ast(AstArray tokens);
 size_t count_tokens(AstArray tokens);
 size_t count_ast(AstArray ast);
 
+
+
+// settings
+bool show_tokens = true;
+bool show_ast = true;
+bool show_stats = true;
+bool show_nops = false;
+
+
+
 int main(int argc, char **argv){
-	bool show_tokens = true;
-	bool show_ast = true;
-	bool show_stats = true;
 	char *input = NULL;
 	for (size_t i=1; i!=argc; i+=1){
 		if (argv[i][0] == '-'){
-			char opt = argv[i][1];
-			switch (opt){
-			case 'h':
-				printf("testnodes <option> <filename>\n  options:\n");
-				printf("  -h     print help");
-				printf("  -t     dont show tokens");
-				printf("  -a     dont show ast nodes");
-				printf("  -s     dont show statistics");
-				break;
-			case 't': show_tokens = false; break;
-			case 'a': show_ast = false; break;
-			case 's': show_stats = false; break;
-			default:
-				fprintf(stderr, "unknown option: -%c\n", opt);
-				return 10;
+			for (size_t j=1;; j+=1){
+				char opt = argv[i][j];
+				if (opt == '\0') break;
+				switch (opt){
+				case 'h':
+					printf("testnodes <option> <filename>\n  options:\n");
+					printf("  -h     print help");
+					printf("  -t     dont show tokens");
+					printf("  -a     dont show ast nodes");
+					printf("  -s     dont show statistics");
+					printf("  -n     show nops");
+					break;
+				case 't': show_tokens = false; break;
+				case 'a': show_ast    = false; break;
+				case 's': show_stats  = false; break;
+				case 'n': show_nops   = true;  break;
+				default:
+					fprintf(stderr, "unknown option: -%c\n", opt);
+					return 10;
+				}
 			}
 		} else{
 			if (input != NULL){
@@ -59,6 +71,8 @@ int main(int argc, char **argv){
 		}
 	}
 	read_time = clock() - read_time;
+
+	init_keyword_names();
 
 	time_t tok_time = clock();
 	AstArray tokens = make_tokens(text.data);
@@ -113,9 +127,15 @@ void print_tokens(AstArray tokens){
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
 		switch (node.type){
 		case Ast_Terminator: return;
-		case Ast_DoubleArrow: i+=1; break;
+		case Ast_Procedure: i+=1; break;
 		case Ast_Unsigned: i+=1;
 			printf(": %lu", data.u64);
+			break;
+		case Ast_Float32: i+=1;
+			printf(": %f", data.f32);
+			break;
+		case Ast_Float64: i+=1;
+			printf(": %lf", data.f64);
 			break;
 		default: break;
 		}
@@ -127,6 +147,7 @@ void print_ast(AstArray ast){
 	for (size_t i=1; i!=ast.end-ast.data; i+=1){
 		AstNode node = ast.data[i];
 		AstData data = ast.data[i].tail[0];
+		if (!show_nops && node.type == Ast_Nop) continue;
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
 		switch (node.type){
 		case Ast_Terminator: return;
@@ -137,7 +158,7 @@ void print_ast(AstArray ast){
 				if (node.flags & AstFlag_ReturnSpec){ printf("ReturnSpec "); }
 			}
 			break;
-		case Ast_Arrow:
+		case Ast_ProcedureClass:
 			printf(": arg_count = %lu", node.count);
 			break;
 		case Ast_StartScope:
@@ -146,10 +167,14 @@ void print_ast(AstArray ast){
 		case Ast_Unsigned: i+=1;
 			printf(": %lu", data.u64);
 			break;
+		case Ast_Float32: i+=1;
+			printf(": %f", data.f32);
+			break;
+		case Ast_Float64: i+=1;
+			printf(": %lf", data.f64);
+			break;
 		case Ast_Identifier:
 		case Ast_EnumLiteral:
-		case Ast_Float32:
-		case Ast_Float64:
 		case Ast_Character:
 		case Ast_String:
 			i += 1;

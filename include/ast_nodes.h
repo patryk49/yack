@@ -3,16 +3,16 @@
 
 #define NODE_LIST \
 /* KEYWORDS FOR CONTROL FLOW */ \
-	X(If,       0, 0), \
-	X(Else,     0, 0), \
-	X(While,    0, 0), \
-	X(For,      0, 0), \
-	X(Break,    0, 0), \
-	X(Continue, 0, 0), \
-	X(Goto,     0, 0), \
-	X(Return,   0, 0), \
-	X(Defer,    0, 0), \
-	X(With,     0, 0), \
+	X(If,       255, 0), \
+	X(Else,     255, 0), \
+	X(While,    255, 0), \
+	X(For,      255, 0), \
+	X(Break,    255, 0), \
+	X(Continue, 255, 0), \
+	X(Goto,     255, 0), \
+	X(Return,   255, 10), \
+	X(Defer,    255, 0), \
+	X(With,     255, 0), \
 \
 /* KEYWORD OPERATIONS */ \
 	X(Try,    0, 0), \
@@ -55,8 +55,8 @@
 	X(DoublePointer, 255, 120), \
 	X(SpanClass,     255, 132), \
 	X(ArrayClass,    255, 132), \
-	X(Arrow,          10,  10), \
-	X(DoubleArrow,   255,  51), \
+	X(ProcedureClass, 10,  10), \
+	X(Procedure,     255,  51), \
 \
 /* BINARY ASSIGNMENTS */ \
 	X(Assign,             40, 40), \
@@ -115,7 +115,6 @@
 	X(Semicolon,   5, 0), \
 	X(Terminator,  5, 0), \
 	X(Comma,       5, 0), \
-	X(CloseScope,  5, 0), \
 \
 	X(StartScope, 5, 0), \
 	X(EndScope,   5, 0), \
@@ -144,7 +143,6 @@
 /* AFTER PARSING */ \
 	X(ProcPointer, 255, 0), \
 	X(Initializer, 255, 0), \
-	X(Procedure,   255, 0), \
 	X(Nop,         255, 0), \
 	X(Error,       255, 0), \
 	X(Value,       255, 0)
@@ -179,41 +177,18 @@ static const uint8_t PrecsRight[] = { NODE_LIST };
 
 
 
-// keyword strings table
-static const char *KeywordNames[] = {
-// KEYWORDS
-	"if",       "else",      "while",       "for",
-	"defer",    "return",
-	"break",    "continue",  "goto",
-	"assert",
-	"do",
-	
-	"load",     "import",    "export",
+// keywords
+#define AST_KW_START Ast_If
+#define AST_KW_END   Ast_Import
 
-	"struct",   "enum",      "bitfield",    "expr",
+static uint64_t KeywordNamesU64[AST_KW_END-AST_KW_START+1];
 
-// DIRECTIVES
-	"if",       "for",       "try",      // control statements
-	"params",                            // module parameters declaration
-	"asm",                               // inlineassembly
-	"load",
-	"assert",                            // assertion
-	"at",                                // filed modifiers
-	"size",     "aligning",  "const",    // data class information
-	"fcount",   "fnames",    "cfnames",  // field information
-	"dsalloc",  "cdsalloc",  "bssalloc", // data segment allocators
-	"hot",      "cold",                  // compiler hints
-	"run",      "pull",                  // expression modifiers
-	"inl",      "noinl",     "callc",    // procedure flags
-
-// BASIC CONSTANTS
-	"Class",  "Null",   "True", "False",
-
-// BASIC COMPILE TIME INFORMATION
-	"class",   "isconst",
-	"bytes",   "aligning",       "fcount",
-
-// BASIC FUNCTIONS
-	"abs",
-	"min", "max",  "clamp",
-};
+static void init_keyword_names(void){
+	for (size_t i=AST_KW_START; i<=AST_KW_END; i+=1){
+		uint64_t kw = AstTypeNames[i][0] + ('a'-'A');
+		for (size_t j=1; AstTypeNames[i][j]!='\0'; j+=1){
+			kw |= (uint64_t)AstTypeNames[i][j] << (j*8);
+		}
+		KeywordNamesU64[i-AST_KW_START] = kw;
+	}
+}

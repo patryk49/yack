@@ -13,10 +13,6 @@
 
 //#include "classes.h"
 
-static uint64_t KeywordNamesU64[SIZE(KeywordNames)];
-
-static void init_keyword_names(void);
-
 static bool is_valid_name_char(char);
 static bool is_valid_first_name_char(char);
 static bool is_number(char);
@@ -105,10 +101,7 @@ static AstNode *ast_array_push2(AstArray *arr, AstNode node, AstData data){
 }
 
 
-#if 1
 static AstArray make_tokens(const char *input){
-	init_keyword_names();
-
 	const char *text_begin = input;
 	AstArray res = ast_array_new(4096);
 	ast_array_push(&res, (AstNode){ .type = Ast_Terminator });
@@ -140,7 +133,7 @@ static AstArray make_tokens(const char *input){
 			}
 			if (*input == '>'){
 				input += 1;
-				curr.type = Ast_DoubleArrow;
+				curr.type = Ast_Procedure;
 				curr_data = (AstData){0};
 				goto AddTokenWithData;
 			}
@@ -163,7 +156,7 @@ static AstArray make_tokens(const char *input){
 				if (prev_token->type != Ast_ClosePar)
 					RETURN_ERROR("expected closing parenthesis before -> symbol", position);
 				input += 1;
-				prev_token->type = Ast_Arrow;
+				prev_token->type = Ast_ProcedureClass;
 				goto SkipToken;
 			}
 			curr.type = Ast_Subtract;
@@ -516,9 +509,10 @@ static AstArray make_tokens(const char *input){
 				while (is_valid_name_char(input[size])) size += 1;
 
 				if (2 <= size && size <= 8){
-					uint64_t text = *(uint64_t *)input;
-					for (size_t i=(size_t)Ast_If; i<=(size_t)Ast_Assert; i+=1){
-						if (text == KeywordNamesU64[i]){
+					uint64_t text = 0;
+					memcpy(&text, input, size);
+					for (size_t i=AST_KW_START; i<=AST_KW_END; i+=1){
+						if (text == KeywordNamesU64[i-AST_KW_START]){
 							curr.type = (enum AstType)i;
 							input += size;
 							goto AddToken;
@@ -554,7 +548,6 @@ ReturnError:
 	res.data = NULL;
 	return res;
 }
-#endif
 
 
 
@@ -609,6 +602,7 @@ ExpectValue:{
 		case Ast_LogicNot:
 		case Ast_SpanClass:
 		case Ast_Splat:
+		case Ast_Return:
 		SimplePrefixOperator:
 			CHECK_OPER_STACK_OVERFLOW(curr.pos);
 			opers[opers_size] = curr; opers_size += 1;
@@ -649,7 +643,7 @@ ExpectValue:{
 			curr.count = 1;
 			curr.pos = res_it - tokens.data; // save position of nop node
 			res_it += 1; // add a nop to hold the procedure header when needed
-			if (it->type == Ast_ClosePar || it->type == Ast_Arrow) goto FinishEmptyScope;
+			if (it->type==Ast_ClosePar || it->type==Ast_ProcedureClass) goto PushEmptyScope;
 			goto SimplePrefixOperator;
 		}
 
@@ -657,15 +651,15 @@ ExpectValue:{
 			RETURN_ERROR("expected value", curr.pos);
 		}
 
-		FinishEmptyScope:{
+		PushEmptyScope:{
 			curr.count = 0;
 			CHECK_OPER_STACK_OVERFLOW(it->pos);
 			opers[opers_size] = curr; opers_size += 1;
 			curr = *it;
 			it += 1;
 			switch (curr.type){
-			case Ast_ClosePar: goto HandleClosePar;
-			case Ast_Arrow:    goto HandleCloseParArrow;
+			case Ast_ClosePar:       goto HandleClosePar;
+			case Ast_ProcedureClass: goto HandleCloseParArrow;
 			default: assert(false && "unimplemented closing symbol");
 			}
 			goto ExpectValue;
@@ -683,10 +677,10 @@ ExpectValue:{
 			AstNode head = opers[opers_size-1];
 			if (PrecsRight[head.type] < PrecsLeft[curr.type]) break;
 			opers_size -= 1;
-			if (head.type == Ast_DoubleArrow){
+			if (head.type == Ast_Procedure){
 				AstNode *open_scope = tokens.data + head.pos;
 				*(res_it + 0) = (AstNode){ .type = Ast_Return, .pos=open_scope->pos };
-				*(res_it + 1) = (AstNode){ .type = Ast_CloseScope, .pos=(tokens.end-1)->pos };
+				*(res_it + 1) = (AstNode){ .type = Ast_EndScope, .pos=(tokens.end-1)->pos };
 				open_scope->pos = (res_it + 1 - tokens.data) - head.pos;
 				res_it += 2;
 				continue;
@@ -719,7 +713,7 @@ ExpectValue:{
 			opers_size -= 1;
 			AstNode head = opers[opers_size];
 			switch (head.type){
-			case Ast_Arrow:{
+			case Ast_ProcedureClass:{
 				AstNode open_oper = { .type = Ast_StartScope, .pos = res_it - tokens.data };
 				AstNode open_node = { .type = Ast_StartScope, .pos = curr.pos };
 				opers[opers_size] = open_oper; opers_size += 1;
@@ -741,8 +735,8 @@ ExpectValue:{
 		
 		case Ast_CloseBrace: goto HandleCloseBrace;
 
-		case Ast_Arrow:
-		HandleCloseParArrow:{ // in realit it meant ClosePar + Arrow
+		case Ast_ProcedureClass:
+		HandleCloseParArrow:{
 			if (opers[opers_size-1].type != Ast_OpenPar)
 				RETURN_ERROR("mismatched parenthesis", (it-1)->pos);
 			opers_size -= 1;
@@ -750,7 +744,7 @@ ExpectValue:{
 			AstNode *argstart_node = tokens.data + sc.pos;
 
 			if (it->type != Ast_OpenBrace){ // consider arrow operator
-				sc.type = Ast_Arrow; // use sc to preserve the index of argument list
+				sc.type = Ast_ProcedureClass; // use sc to preserve the index of argument list
 				opers[opers_size] = sc; opers_size += 1;
 				goto ExpectValue;
 			}
@@ -791,10 +785,10 @@ ExpectValue:{
 		AstNode sc = opers[opers_size];
 		AstNode *argstart_node = tokens.data + sc.pos;
 
-		if (it->type == Ast_DoubleArrow){
+		if (it->type == Ast_Procedure){
 			it += 2;
 			AstNode open_node = { .type = Ast_StartScope, .pos = sc.pos };
-			AstNode open_oper = { .type = Ast_DoubleArrow, .pos = res_it - tokens.data };
+			AstNode open_oper = { .type = Ast_Procedure, .pos = res_it - tokens.data };
 			opers[opers_size] = open_oper; opers_size += 1;
 			*res_it = open_node; res_it += 1;
 
@@ -840,15 +834,6 @@ ReturnError:
 
 
 
-
-static void init_keyword_names(void){
-	for (size_t i=0; i!=SIZE(KeywordNames); i+=1){
-		for (size_t j=0; j!=sizeof(uint64_t); j+=1){
-			if (KeywordNames[i][j] == '\0') break;
-			KeywordNamesU64[i] |= (uint64_t)KeywordNames[i][j] << j*8;
-		}
-	}
-}
 
 static bool is_valid_name_char(char c){
 	return (c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c<='9') || c=='_';

@@ -72,20 +72,19 @@ INFIX OPERATORS
 	*    BitAnd
 	^    BitXor
 	<<   ShiftLeft
+	<<@  ExpandedShiftLeft
+	<<%  RotateLeft
 	>>   ShiftRight
+	>>@  ExpandedShiftRight
+	>>%  RotateRight
 
 	~    Cast
 	~%~  Reinterpret
 	|>   Pipe
 
 
-array |> map(Int.LESS)
+x := with m:=0, for e:arr if e>m { m=e }, m
 
-map :: (iterable, proc) => ${
-	iter := iter(iterable)
-	proc := proc
-	advance :: (s: *@) -> {
-		{value, end} := advance(&s.iter)
-		return end ? {_, True} else {s.proc(value), False}
-	}
-}
+x := for e : arr { if e == value break (True) } else { False }
+
+x := {#for c : 'A'..'Z'+1 {c}}
