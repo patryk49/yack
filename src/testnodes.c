@@ -15,9 +15,10 @@ size_t count_ast(AstArray ast);
 
 // settings
 bool show_tokens = true;
-bool show_ast = true;
-bool show_stats = true;
-bool show_nops = false;
+bool show_ast    = true;
+bool show_stats  = true;
+bool show_nops   = false;
+bool show_sets   = false;
 
 
 
@@ -30,17 +31,19 @@ int main(int argc, char **argv){
 				if (opt == '\0') break;
 				switch (opt){
 				case 'h':
-					printf("testnodes <option> <filename>\n  options:\n");
-					printf("  -h     print help");
-					printf("  -t     dont show tokens");
-					printf("  -a     dont show ast nodes");
-					printf("  -s     dont show statistics");
-					printf("  -n     show nops");
-					break;
+					puts("testnodes <option> <filename>\n  options:");
+					puts("  -h     print help");
+					puts("  -t     dont show tokens");
+					puts("  -a     dont show ast nodes");
+					puts("  -s     dont show statistics");
+					puts("  -S     print hash set info");
+					puts("  -n     show nops");
+					return 0;
 				case 't': show_tokens = false; break;
 				case 'a': show_ast    = false; break;
 				case 's': show_stats  = false; break;
 				case 'n': show_nops   = true;  break;
+				case 'S': show_sets   = true;  break;
 				default:
 					fprintf(stderr, "unknown option: -%c\n", opt);
 					return 10;
@@ -72,7 +75,10 @@ int main(int argc, char **argv){
 	}
 	read_time = clock() - read_time;
 
-	init_keyword_names();
+	if (initialize_compiler()){
+		fprintf(stderr, "failed to initialize\n");
+		return 2137;
+	}
 
 	time_t tok_time = clock();
 	AstArray tokens = make_tokens(text.data);
@@ -107,35 +113,51 @@ int main(int argc, char **argv){
 		size_t ast_size = ast.end - ast.data;
 		size_t token_count = count_tokens(tokens);
 		size_t ast_count = count_ast(ast);
-		printf("reading time:  %.2lf [s]\n", (double)read_time*0.000001);
-		printf("lexing time:   %.2lf [s]\n", (double)tok_time*0.000001);
-		printf("parsing time:  %.2lf [s]\n", (double)parse_time*0.000001);
+		printf("reading time:  %lf [s]\n", (double)read_time*0.000001);
+		printf("lexing time:   %lf [s]\n", (double)tok_time*0.000001);
+		printf("parsing time:  %lf [s]\n", (double)parse_time*0.000001);
 		printf("token size:    %zu [nodes]\n", token_size);
 		printf("ast size:      %zu [nodes]\n", ast_size);
 		printf("token count:   %zu\n", token_count);
 		printf("ast count:     %zu\n", ast_count);
-		printf("ast per token: %.2lf\n", (double)ast_size / (double)token_size);
+		printf("ast per token: %lf\n", (double)ast_size / (double)token_size);
+	}
+
+	if (show_sets){
+		printf("uniuqe names:         %zu\n", global_name_set.size);
+		printf("name set capacity:    %zu\n", global_name_set.capacity);
+		printf("names data size:      %zu\n", global_names.size);
+		printf("names data capacity:  %zu\n", global_names.capacity);
+		printf("hash colissions:      %zu\n", hash_colissions);
+		printf("hash colission ratio: %lf\n", (double)hash_colissions/(double)global_name_set.size);
 	}
 
 	return 0;
 }
 
 void print_tokens(AstArray tokens){
-	for (size_t i=1; i!=tokens.end-tokens.data; i+=1){
+	for (size_t i=1; i!=tokens.end-tokens.data;){
 		AstNode node = tokens.data[i];
 		AstData data = tokens.data[i].tail[0];
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
+		i += TokenSizes[node.type];
 		switch (node.type){
 		case Ast_Terminator: return;
-		case Ast_Procedure: i+=1; break;
-		case Ast_Unsigned: i+=1;
+		case Ast_Procedure: break;
+		case Ast_Unsigned:
 			printf(": %lu", data.u64);
 			break;
-		case Ast_Float32: i+=1;
+		case Ast_Float32:
 			printf(": %f", data.f32);
 			break;
-		case Ast_Float64: i+=1;
+		case Ast_Float64:
 			printf(": %lf", data.f64);
+			break;
+		case Ast_Identifier:
+			printf(": ");
+			for (size_t i=0; i!=node.count; i+=1){
+				putchar(global_names.data[data.name_id+i]);
+			}
 			break;
 		default: break;
 		}
@@ -144,11 +166,12 @@ void print_tokens(AstArray tokens){
 }
 
 void print_ast(AstArray ast){
-	for (size_t i=1; i!=ast.end-ast.data; i+=1){
+	for (size_t i=1; i!=ast.end-ast.data;){
 		AstNode node = ast.data[i];
 		AstData data = ast.data[i].tail[0];
 		if (!show_nops && node.type == Ast_Nop) continue;
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
+		i += AstNodeSizes[node.type];
 		switch (node.type){
 		case Ast_Terminator: return;
 		case Ast_Procedure:
@@ -164,20 +187,24 @@ void print_ast(AstArray ast){
 		case Ast_StartScope:
 			printf(": scope_size = %u", node.pos);
 			break;
-		case Ast_Unsigned: i+=1;
+		case Ast_Unsigned:
 			printf(": %lu", data.u64);
 			break;
-		case Ast_Float32: i+=1;
+		case Ast_Float32:
 			printf(": %f", data.f32);
 			break;
-		case Ast_Float64: i+=1;
+		case Ast_Float64:
 			printf(": %lf", data.f64);
 			break;
 		case Ast_Identifier:
+			printf(": ");
+			for (size_t i=0; i!=node.count; i+=1){
+				putchar(global_names.data[data.name_id+i]);
+			}
+			break;
 		case Ast_EnumLiteral:
 		case Ast_Character:
 		case Ast_String:
-			i += 1;
 		default: break;
 		}
 		putchar('\n');
@@ -185,9 +212,23 @@ void print_ast(AstArray ast){
 }
 
 size_t count_tokens(AstArray tokens){
-	return 0;
+	size_t res = 0;
+	for (size_t i=1; i!=tokens.end-tokens.data;){
+		AstNode node = tokens.data[i];
+		i += TokenSizes[node.type];
+		res += 1;
+		if (node.type == Ast_Terminator) break;
+	}
+	return res;
 }
 
 size_t count_ast(AstArray ast){
-	return 0;
+	size_t res = 0;
+	for (size_t i=1; i!=ast.end-ast.data;){
+		AstNode node = ast.data[i];
+		i += AstNodeSizes[node.type];
+		res += 1;
+		if (node.type == Ast_Terminator) break;
+	}
+	return res;
 }

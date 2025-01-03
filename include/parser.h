@@ -12,6 +12,11 @@
 #include "classes.h"
 
 //#include "classes.h"
+static bool initialize_compiler(void){
+	init_keyword_names();
+	if (init_name_id_set(64)) return true;
+	return false;
+}
 
 static bool is_valid_name_char(char);
 static bool is_valid_first_name_char(char);
@@ -92,7 +97,7 @@ static AstNode *ast_array_push(AstArray *arr, AstNode node){
 }
 
 static AstNode *ast_array_push2(AstArray *arr, AstNode node, AstData data){
-	if (arr->end+2 < arr->maxptr) ast_array_grow(arr);
+	if (arr->end+2 > arr->maxptr) ast_array_grow(arr);
 	AstNode *res = arr->end;
 	arr->end += 2;
 	*res = node;
