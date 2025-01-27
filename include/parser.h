@@ -23,8 +23,6 @@ static bool is_valid_first_name_char(char);
 static bool is_number(char);
 static bool is_whitespace(char);
 
-static bool is_keyword_statement(enum AstType type);
-
 static uint32_t parse_character(const char **);
 
 static enum AstType parse_number(void *data_res, const char **src_it);
@@ -363,8 +361,8 @@ static AstArray make_tokens(const char *input){
 			input += 1;
 			curr.type = Ast_Variable;
 			if (*input == ':'){
-				curr.count |= AstFlag_Constant;
-				curr.count |= AstFlag_Initialized;
+				curr.flags |= AstFlag_Constant;
+				curr.flags|= AstFlag_Initialized;
 				input += 1;
 			} else if (*input == '='){
 				curr.count |= AstFlag_Initialized;
@@ -374,8 +372,8 @@ static AstArray make_tokens(const char *input){
 			}
 
 			if (prev_token->type == Ast_Identifier){
-				prev_token->type  = curr.type;
-				prev_token->count = curr.count;
+				curr.count = prev_token->count;
+				*prev_token  = curr;
 				goto SkipToken;
 			}
 
@@ -488,7 +486,7 @@ static AstArray make_tokens(const char *input){
 			input += 1;
 			enum AstType prev_type = prev_token->type;
 			if (
-				scope_depth != 0 || (Ast_Assign <= prev_type && prev_type <= Ast_Semicolon)
+				scope_depth != 0 || (Ast_OpenPar <= prev_type && prev_type <= Ast_Semicolon)
 			) goto SkipToken;
 			curr.type = Ast_Semicolon;
 			goto AddToken;
@@ -585,6 +583,14 @@ ExpectValue:{
 		switch (curr.type){
 		case Ast_Terminator:
 			goto EndOfFile;
+
+		case Ast_ClosePar:
+		case Ast_CloseBrace:
+		case Ast_CloseBracket:
+		case Ast_ProcedureClass:
+			it -= 1;
+			goto ExpectOperator;
+
 		case Ast_Identifier:
 		case Ast_Unsigned:
 		case Ast_Float32:
@@ -629,6 +635,13 @@ ExpectValue:{
 			curr.type = Ast_BitNot;
 			goto SimplePrefixOperator;
 
+		case Ast_Variable:
+			CHECK_OPER_STACK_OVERFLOW(curr.pos);
+			memcpy(opers+opers_size, it, sizeof(AstData));
+			opers_size += 1;
+			it += 1;
+			goto SimplePrefixOperator;
+
 		case Ast_OpenBrace:
 			if (it->type == Ast_CloseBrace){
 				it += 1;
@@ -651,6 +664,14 @@ ExpectValue:{
 			if (it->type==Ast_ClosePar || it->type==Ast_ProcedureClass) goto PushEmptyScope;
 			goto SimplePrefixOperator;
 		}
+
+		case Ast_With:
+			*res_it = (AstNode){ .type = Ast_OpenBlock, .pos = curr.pos };
+			res_it += 1;
+			CHECK_OPER_STACK_OVERFLOW(curr.pos);
+			opers[opers_size] = curr;
+			opers_size += 1;
+			goto ExpectValue;
 
 		default:
 			RETURN_ERROR("expected value", curr.pos);
@@ -690,10 +711,15 @@ ExpectValue:{
 				res_it += 2;
 				continue;
 			}
+			if (head.type == Ast_With){
+				head = (AstNode){ .type = Ast_EndScope, .pos = curr.pos };
+			}
 			*res_it = head;
 			res_it += 1;
 			if (head.type == Ast_Variable){
 				opers_size -= 1;
+				*res_it = opers[opers_size];
+				res_it += 1;
 			}
 		}
 
@@ -776,6 +802,12 @@ ExpectValue:{
 			curr.type = Ast_Span;
 			goto SimplePostfixOperator;
 
+		case Ast_OpenPar:
+			curr.type = Ast_Call;
+			curr.count = 1;
+			if (it->type == Ast_ClosePar) goto PushEmptyScope;
+			goto SimplePrefixOperator;
+
 		default:
 			RETURN_ERROR("parser error: unhandled token", curr.pos);
 		}
@@ -784,6 +816,12 @@ ExpectValue:{
 // Procedure nodes schematic:
 // (Procedure flags argcount pos) (...args) (StartScope body_size) (...body) (EndScope pos)
 	HandleClosePar:{
+		if (opers[opers_size-1].type != Ast_Call){
+			opers_size -= 1;
+			AstNode sc = opers[opers_size];
+			*res_it = sc;
+			goto ExpectOperator;
+		}
 		if (opers[opers_size-1].type != Ast_OpenPar)
 			RETURN_ERROR("mismatched parenthesis", (it-1)->pos);
 		opers_size -= 1;
@@ -856,9 +894,6 @@ static bool is_whitespace(char c){
 	return c==' ' || c=='\n' || c=='\t' || c=='\v';
 }
 
-static bool is_keyword_statement(enum AstType type){
-	return Ast_If <= type && type <= Ast_Assert;
-}
 
 
 static uint32_t parse_character(const char **iter){
@@ -877,6 +912,11 @@ ParseCharacter:{
 		case '\'':
 		case '\"':
 		case '\\':
+			break;
+		case '@': case '#': case '$': case '%': case '^': case '&': case '*':
+		case '(': case ')': case '[': case ']': case '{': case '}':
+			c = '\\';
+			it -= 1;
 			break;
 		case 'x':
 			utf_base = 16;

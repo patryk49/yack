@@ -31,13 +31,15 @@ int main(int argc, char **argv){
 				if (opt == '\0') break;
 				switch (opt){
 				case 'h':
-					puts("testnodes <option> <filename>\n  options:");
-					puts("  -h     print help");
-					puts("  -t     dont show tokens");
-					puts("  -a     dont show ast nodes");
-					puts("  -s     dont show statistics");
-					puts("  -S     print hash set info");
-					puts("  -n     show nops");
+					printf(
+						"testnodes <option> <filename>\n  options:\n"
+						"  -h     print help\n"
+						"  -t     dont show tokens\n"
+						"  -a     dont show ast nodes\n"
+						"  -s     dont show statistics\n"
+						"  -S     print hash set info\n"
+						"  -n     show nops\n"
+					);
 					return 0;
 				case 't': show_tokens = false; break;
 				case 'a': show_ast    = false; break;
@@ -154,10 +156,21 @@ void print_tokens(AstArray tokens){
 			printf(": %lf", data.f64);
 			break;
 		case Ast_Identifier:
-			printf(": ");
+			printf(": \"");
 			for (size_t i=0; i!=node.count; i+=1){
 				putchar(global_names.data[data.name_id+i]);
 			}
+			printf("\"");
+			break;
+		case Ast_Variable:
+			printf(": \"");
+			for (size_t i=0; i!=node.count; i+=1){
+				putchar(global_names.data[data.name_id+i]);
+			}
+			printf("\" ");
+			if (node.flags & AstFlag_ClassSpec  ){ printf("ClassSpec ");   }
+			if (node.flags & AstFlag_Initialized){ printf("Initialized "); }
+			if (node.flags & AstFlag_Constant   ){ printf("Constant");     }
 			break;
 		default: break;
 		}
@@ -169,7 +182,7 @@ void print_ast(AstArray ast){
 	for (size_t i=1; i!=ast.end-ast.data;){
 		AstNode node = ast.data[i];
 		AstData data = ast.data[i].tail[0];
-		if (!show_nops && node.type == Ast_Nop) continue;
+		if (!show_nops && node.type == Ast_Nop){ i+=1; continue; }
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
 		i += AstNodeSizes[node.type];
 		switch (node.type){
@@ -197,10 +210,20 @@ void print_ast(AstArray ast){
 			printf(": %lf", data.f64);
 			break;
 		case Ast_Identifier:
-			printf(": ");
+			printf(": \"");
 			for (size_t i=0; i!=node.count; i+=1){
 				putchar(global_names.data[data.name_id+i]);
 			}
+			break;
+		case Ast_Variable:
+			printf(": \"");
+			for (size_t i=0; i!=node.count; i+=1){
+				putchar(global_names.data[data.name_id+i]);
+			}
+			printf("\" ");
+			if (node.flags & AstFlag_ClassSpec  ){ printf("ClassSpec ");   }
+			if (node.flags & AstFlag_Initialized){ printf("Initialized "); }
+			if (node.flags & AstFlag_Constant   ){ printf("Constant");     }
 			break;
 		case Ast_EnumLiteral:
 		case Ast_Character:

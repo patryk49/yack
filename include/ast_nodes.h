@@ -10,9 +10,9 @@
 	X(Break,    255,  0, 1, 1), \
 	X(Continue, 255,  0, 1, 1), \
 	X(Goto,     255,  0, 1, 1), \
-	X(Return,   255, 10, 1, 1), \
+	X(Return,   255, 16, 1, 1), \
 	X(Defer,    255,  0, 1, 1), \
-	X(With,     255,  0, 1, 1), \
+	X(With,     255, 12, 1, 1), \
 \
 /* KEYWORD OPERATIONS */ \
 	X(Try,    0, 0, 1, 1), \
@@ -20,19 +20,6 @@
 \
 /* DIRECTIVES */ \
 	X(Import, 0, 0, 1, 1), \
-\
-/* CLOSING SYMBOLS */ \
-	X(ClosePar,     10, 0, 1, 1), \
-	X(CloseBracket, 10, 0, 1, 1), \
-	X(CloseBrace,   10, 0, 1, 1), \
-\
-/* OPENING SYMBOLS */ \
-	X(OpenPar,        140, 0, 1, 1), \
-	X(OpenBracket,    140, 0, 1, 1), \
-	X(OpenBrace,       30, 0, 1, 1), \
-	X(OpenDotPar,     140, 0, 1, 1), \
-	X(OpenDotBracket, 140, 0, 1, 1), \
-	X(OpenDotBrace,   110, 0, 1, 1), \
 \
 /* POSTFIX OPERATORS */ \
 	X(Dereference,    140, 0, 1, 1), \
@@ -55,8 +42,22 @@
 	X(DoublePointer, 255, 120, 1, 1), \
 	X(SpanClass,     255, 132, 1, 1), \
 	X(ArrayClass,    255, 132, 1, 1), \
-	X(ProcedureClass, 10,  10, 1, 1), \
+	X(ProcedureClass, 20,  20, 1, 1), \
 	X(Procedure,     255,  51, 2, 1), \
+\
+/* CLOSING SYMBOLS */ \
+	X(ClosePar,     10, 0, 1, 1), \
+	X(CloseBracket, 10, 0, 1, 1), \
+	X(CloseBrace,   10, 0, 1, 1), \
+\
+/* OPENING SYMBOLS */ \
+	X(OpenPar,        140, 0, 1, 1), \
+	X(OpenBracket,    140, 0, 1, 1), \
+	X(OpenBrace,       30, 0, 1, 1), \
+	X(OpenDotPar,     140, 0, 1, 1), \
+	X(OpenDotBracket, 140, 0, 1, 1), \
+	X(OpenDotBrace,   110, 0, 1, 1), \
+	X(OpenBlock,      255, 0, 1, 1), \
 \
 /* BINARY ASSIGNMENTS */ \
 	X(Assign,             40, 40, 1, 1), \
@@ -108,16 +109,16 @@
 	X(Pipe,         50, 50, 1, 1), \
 \
 /* OTHER EXPRESSINS */ \
-	X(Variable,       6, 36, 1, 1), \
-	X(VariableSymbol, 6, 36, 1, 1), \
+	X(Variable,       11, 36, 2, 2), \
+	X(VariableSymbol, 11, 36, 1, 1), \
 \
 /* SEPARATORS */ \
-	X(Semicolon,   5, 0, 1, 1), \
-	X(Terminator,  5, 0, 1, 1), \
-	X(Comma,       5, 0, 1, 1), \
+	X(Semicolon,  10, 0, 1, 1), \
+	X(Terminator, 10, 0, 1, 1), \
+	X(Comma,      18, 0, 1, 1), \
 \
-	X(StartScope, 5, 0, 1, 1), \
-	X(EndScope,   5, 0, 1, 1), \
+	X(StartScope, 10, 0, 1, 1), \
+	X(EndScope,   10, 0, 1, 1), \
 \
 /* VALUES */ \
 	X(Identifier,  255, 0, 2, 2), \

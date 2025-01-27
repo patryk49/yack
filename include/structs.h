@@ -489,11 +489,12 @@ typedef struct StaticMemory{
 
 // PARSE TREE
 enum AstFlags{
-	AstFlag_Negate      = 1 << 0,
-	AstFlag_Constant    = 1 << 1,
-	AstFlag_Initialized = 1 << 2,
-	AstFlag_ClassSpec   = 1 << 3,
-	AstFlag_ReturnSpec  = 1 << 4,
+	AstFlag_Final       = 1 << 0,
+	AstFlag_Negate      = 1 << 1,
+	AstFlag_Constant    = 1 << 2,
+	AstFlag_Initialized = 1 << 3,
+	AstFlag_ClassSpec   = 1 << 4,
+	AstFlag_ReturnSpec  = 1 << 5,
 };
 
 typedef union AstData{
