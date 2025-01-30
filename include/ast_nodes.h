@@ -34,30 +34,31 @@
 	X(Condition,       59, 0, 1, 1), \
 \
 /* PREFIX OPERATORS */ \
-	X(Plus,          255, 120, 1, 1), \
-	X(Minus,         255, 120, 1, 1), \
-	X(LogicNot,      255, 120, 1, 1), \
-	X(BitNot,        255, 120, 1, 1), \
-	X(Pointer,       255, 120, 1, 1), \
-	X(DoublePointer, 255, 120, 1, 1), \
-	X(SpanClass,     255, 132, 1, 1), \
-	X(ArrayClass,    255, 132, 1, 1), \
-	X(ProcedureClass, 20,  20, 1, 1), \
-	X(Procedure,     255,  51, 2, 1), \
+	X(Plus,           255, 120, 1, 1), \
+	X(Minus,          255, 120, 1, 1), \
+	X(LogicNot,       255, 120, 1, 1), \
+	X(BitNot,         255, 120, 1, 1), \
+	X(Pointer,        255, 120, 1, 1), \
+	X(DoublePointer,  255, 120, 1, 1), \
+	X(Vectorize,      255, 120, 1, 1), \
+	X(SpanClass,      255, 132, 1, 1), \
+	X(ArrayClass,     255, 132, 1, 1), \
+	X(ProcedureClass, 255, 132, 0, 1), \
+	X(Procedure,      255,  20, 0, 1), \
 \
 /* CLOSING SYMBOLS */ \
-	X(ClosePar,     10, 0, 1, 1), \
-	X(CloseBracket, 10, 0, 1, 1), \
-	X(CloseBrace,   10, 0, 1, 1), \
+	X(EndScope,   10, 0, 1, 1), \
 \
 /* OPENING SYMBOLS */ \
-	X(OpenPar,        140, 0, 1, 1), \
-	X(OpenBracket,    140, 0, 1, 1), \
-	X(OpenBrace,       30, 0, 1, 1), \
-	X(OpenDotPar,     140, 0, 1, 1), \
-	X(OpenDotBracket, 140, 0, 1, 1), \
-	X(OpenDotBrace,   110, 0, 1, 1), \
-	X(OpenBlock,      255, 0, 1, 1), \
+	X(OpenPar,            140, 0, 1, 1), \
+	X(OpenProcedure,      140, 0, 1, 1), \
+	X(OpenProcedureClass, 140, 0, 1, 1), \
+	X(OpenBracket,        140, 0, 1, 1), \
+	X(OpenBrace,           30, 0, 1, 1), \
+	X(OpenDotPar,         140, 0, 1, 1), \
+	X(OpenDotBracket,     140, 0, 1, 1), \
+	X(OpenDotBrace,       110, 0, 1, 1), \
+	X(OpenBlock,          255, 0, 1, 1), \
 \
 /* BINARY ASSIGNMENTS */ \
 	X(Assign,             40, 40, 1, 1), \
@@ -118,7 +119,6 @@
 	X(Comma,      18, 0, 1, 1), \
 \
 	X(StartScope, 10, 0, 1, 1), \
-	X(EndScope,   10, 0, 1, 1), \
 \
 /* VALUES */ \
 	X(Identifier,  255, 0, 2, 2), \
@@ -138,15 +138,16 @@
 	X(Tuple, 255, 0, 1, 1), \
 \
 /* UNDECIDED */ \
-	X(Splat, 255, 0, 1, 1), \
-	X(Pound, 255, 0, 1, 1), \
+	X(Splat,     255,   0, 1, 1), \
+	X(Pound,     255,   0, 1, 1), \
 \
 /* AFTER PARSING */ \
-	X(ProcPointer, 255, 0, 1, 1), \
-	X(Initializer, 255, 0, 1, 1), \
-	X(Nop,         255, 0, 1, 1), \
-	X(Error,       255, 0, 1, 1), \
-	X(Value,       255, 0, 1, 1)
+	X(ProcPointer, 255, 255, 0, 1), \
+	X(Initializer, 255, 255, 0, 1), \
+	X(Nop,         255, 255, 1, 1), \
+	X(Error,       255, 255, 0, 1), \
+	X(Value,       255, 255, 0, 1), \
+	X(ReturnClass, 255, 255, 0, 1)
 
 
 

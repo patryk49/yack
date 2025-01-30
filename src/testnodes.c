@@ -140,7 +140,7 @@ int main(int argc, char **argv){
 void print_tokens(AstArray tokens){
 	for (size_t i=1; i!=tokens.end-tokens.data;){
 		AstNode node = tokens.data[i];
-		AstData data = tokens.data[i].tail[0];
+		AstData data = tokens.data[i+1].data;
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
 		i += TokenSizes[node.type];
 		switch (node.type){
@@ -181,14 +181,13 @@ void print_tokens(AstArray tokens){
 void print_ast(AstArray ast){
 	for (size_t i=1; i!=ast.end-ast.data;){
 		AstNode node = ast.data[i];
-		AstData data = ast.data[i].tail[0];
+		AstData data = ast.data[i+1].data;
 		if (!show_nops && node.type == Ast_Nop){ i+=1; continue; }
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
 		i += AstNodeSizes[node.type];
 		switch (node.type){
 		case Ast_Terminator: return;
 		case Ast_Procedure:
-			printf(": arg_count = %lu", node.count);
 			if (node.flags){
 				printf(",  flags = ");
 				if (node.flags & AstFlag_ReturnSpec){ printf("ReturnSpec "); }
@@ -197,8 +196,13 @@ void print_ast(AstArray ast){
 		case Ast_ProcedureClass:
 			printf(": arg_count = %lu", node.count);
 			break;
+		case Ast_Call:
+			printf(": arg_count = %lu ", node.count);
+			if (node.flags & AstFlag_Vectorize){ printf("Vectorize "); }
+			break;
 		case Ast_StartScope:
 			printf(": scope_size = %u", node.pos);
+			if (node.flags & AstFlag_ReturnSpec){ printf("  ReturnSpec"); }
 			break;
 		case Ast_Unsigned:
 			printf(": %lu", data.u64);
@@ -214,6 +218,7 @@ void print_ast(AstArray ast){
 			for (size_t i=0; i!=node.count; i+=1){
 				putchar(global_names.data[data.name_id+i]);
 			}
+			printf("\"");
 			break;
 		case Ast_Variable:
 			printf(": \"");

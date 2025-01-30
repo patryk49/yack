@@ -224,7 +224,6 @@ typedef struct StructClassInfo{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
 	uint16_t size;
-// uint32_t offsets[]; // pretend it exists
 
 	uint16_t stored_field_count;
 
@@ -489,12 +488,21 @@ typedef struct StaticMemory{
 
 // PARSE TREE
 enum AstFlags{
-	AstFlag_Final       = 1 << 0,
-	AstFlag_Negate      = 1 << 1,
-	AstFlag_Constant    = 1 << 2,
-	AstFlag_Initialized = 1 << 3,
-	AstFlag_ClassSpec   = 1 << 4,
-	AstFlag_ReturnSpec  = 1 << 5,
+	AstFlag_Final = 1 << 0,
+
+// operator flags
+	AstFlag_Negate = 1 << 3,
+
+// variable flags
+	AstFlag_Constant    = 1 << 3,
+	AstFlag_Initialized = 1 << 4,
+	AstFlag_ClassSpec   = 1 << 5,
+
+// procedure flags
+	AstFlag_ReturnSpec = 1 << 3,
+
+// call flags
+	AstFlag_Vectorize = 1 << 3,
 };
 
 typedef union AstData{
@@ -507,12 +515,14 @@ typedef union AstData{
 	NameId name_id;
 } AstData;
 
-typedef struct AstNode{
-	enum AstType type : 8;
-	uint8_t  flags;
-	uint16_t count;
-	uint32_t pos;
-	AstData tail[];
+typedef union AstNode{
+	struct{
+		enum AstType type : 8;
+		uint8_t  flags;
+		uint16_t count;
+		uint32_t pos;
+	};
+	AstData data;
 } AstNode;
 
 
