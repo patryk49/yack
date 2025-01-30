@@ -197,6 +197,9 @@ void print_ast(AstArray ast){
 			printf(": arg_count = %lu", node.count);
 			break;
 		case Ast_Call:
+		case Ast_GetProcedure:
+		case Ast_Subscript:
+		case Ast_FieldSubscript:
 			printf(": arg_count = %lu ", node.count);
 			if (node.flags & AstFlag_Vectorize){ printf("Vectorize "); }
 			break;
@@ -214,6 +217,8 @@ void print_ast(AstArray ast){
 			printf(": %lf", data.f64);
 			break;
 		case Ast_Identifier:
+		case Ast_GetField:
+		case Ast_EnumLiteral:
 			printf(": \"");
 			for (size_t i=0; i!=node.count; i+=1){
 				putchar(global_names.data[data.name_id+i]);
@@ -230,7 +235,6 @@ void print_ast(AstArray ast){
 			if (node.flags & AstFlag_Initialized){ printf("Initialized "); }
 			if (node.flags & AstFlag_Constant   ){ printf("Constant");     }
 			break;
-		case Ast_EnumLiteral:
 		case Ast_Character:
 		case Ast_String:
 		default: break;

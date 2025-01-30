@@ -313,7 +313,7 @@ static AstArray make_tokens(const char *input){
 				RETURN_ERROR("too many closing parenthesis", position);
 			scope_count -= 1;
 			enum AstType t = scope_types[scope_count];
-			if (t != Ast_OpenPar && t != Ast_OpenDotPar)
+			if (t != Ast_OpenPar && t != Ast_GetProcedure)
 				RETURN_ERROR("mismatched parenthesis", position);
 			curr.type = Ast_EndScope;
 			goto AddToken;
@@ -329,20 +329,15 @@ static AstArray make_tokens(const char *input){
 				RETURN_ERROR("too many closing braces", position);
 			scope_count -= 1;
 			enum AstType t = scope_types[scope_count];
-			if (t != Ast_OpenBrace && t != Ast_OpenDotBrace)
+			if (t != Ast_OpenBrace && t != Ast_FieldSubscript)
 				RETURN_ERROR("mismatched braces", position);
 			curr.type = Ast_EndScope;
 			goto AddToken;
 		}
 		
 		case '[': input += 1;
-			if (*input == ']'){
-				input += 1;
-				curr.type = Ast_SpanClass;
-				goto AddToken;
-			}
-			PUSH_SCOPE(Ast_OpenBracket);
-			curr.type = Ast_OpenBracket;
+			PUSH_SCOPE(Ast_Subscript);
+			curr.type = Ast_Subscript;
 			goto AddToken;
 		
 		case ']':{ input += 1;
@@ -350,7 +345,7 @@ static AstArray make_tokens(const char *input){
 				RETURN_ERROR("too many closing brackets", position);
 			scope_count -= 1;
 			enum AstType t = scope_types[scope_count];
-			if (t != Ast_OpenBracket && t != Ast_OpenDotBracket)
+			if (t != Ast_Subscript && t != Ast_FieldSubscript)
 				RETURN_ERROR("mismatched brackets", position);
 			curr.type = Ast_EndScope;
 			goto AddToken;
@@ -381,10 +376,6 @@ static AstArray make_tokens(const char *input){
 
 		case '#': input += 1;
 			curr.type = Ast_Pound;
-			goto AddToken;
-
-		case '?': input += 1;
-			curr.type = Ast_Condition;
 			goto AddToken;
 
 		case '$': input += 1;
@@ -425,20 +416,20 @@ static AstArray make_tokens(const char *input){
 		case '.': input += 1;
 			if (*input == '('){
 				input += 1;
-				PUSH_SCOPE(Ast_OpenDotPar);
-				curr.type = Ast_OpenDotPar;
+				PUSH_SCOPE(Ast_GetProcedure);
+				curr.type = Ast_GetProcedure;
 				goto AddToken;
 			}
 			if (*input == '['){
 				input += 1;
-				PUSH_SCOPE(Ast_OpenDotBracket);
-				curr.type = Ast_OpenDotBracket;
+				PUSH_SCOPE(Ast_FieldSubscript);
+				curr.type = Ast_FieldSubscript;
 				goto AddToken;
 			}
 			if (*input == '{'){
 				input += 1;
-				PUSH_SCOPE(Ast_OpenDotBrace);
-				curr.type = Ast_OpenDotBrace;
+				PUSH_SCOPE(Ast_Initialize);
+				curr.type = Ast_Initialize;
 				goto AddToken;
 			}
 			if (*input == '.'){
@@ -468,7 +459,7 @@ static AstArray make_tokens(const char *input){
 				curr_data.name_id = get_name_id(input, size);
 				input += size;
 			}
-			goto AddToken;
+			goto AddTokenWithData;
 
 		case ';':
 			input += 1;
@@ -625,8 +616,6 @@ ExpectValue:{
 			it -= 1;
 			goto ExpectOperator;
 
-		case Ast_Identifier:
-			if (opers[opers_size-1].type == Ast_OpenProcedure){ curr.type = Ast_Variable; }
 		case Ast_Unsigned:
 		case Ast_Float32:
 		case Ast_Float64:
@@ -638,6 +627,14 @@ ExpectValue:{
 			it += 1;
 			res_it += 2;
 			goto ExpectOperator;
+		
+		case Ast_Identifier:
+			if (opers[opers_size-1].type == Ast_OpenProcedure){ curr.type = Ast_Variable; }
+			goto SimpleLiteral;
+		
+		case Ast_GetField:
+			curr.type = Ast_EnumLiteral;
+			goto SimpleLiteral;
 
 		case Ast_Ignored:
 			*res_it = curr;
@@ -646,7 +643,6 @@ ExpectValue:{
 
 		case Ast_BitNot:
 		case Ast_LogicNot:
-		case Ast_SpanClass:
 		case Ast_Vectorize:
 		case Ast_Splat:
 		case Ast_Return:
@@ -686,13 +682,9 @@ ExpectValue:{
 			if (it->type == Ast_EndScope){
 				it += 1;
 				curr.type = Ast_Initializer;
-				*res_it = curr;
+				*res_it = curr; res_it += 1;
 				goto ExpectOperator;
 			}
-			curr.count = 1;
-			goto SimplePrefixOperator;
-
-		case Ast_OpenBracket:
 			curr.count = 1;
 			goto SimplePrefixOperator;
 
@@ -741,6 +733,7 @@ ExpectValue:{
 			RETURN_ERROR("expected value", curr.pos);
 		}
 	}
+
 
 	ExpectOperator:{
 		AstNode curr = *it;
@@ -818,28 +811,44 @@ ExpectValue:{
 		}
 
 		case Ast_Dereference:
-		case Ast_GetField:
 		SimplePostfixOperator:
 			*res_it = curr;
 			res_it += 1;
 			goto ExpectOperator;
 
-		case Ast_SpanClass:
-			curr.type = Ast_Span;
-			goto SimplePostfixOperator;
+		case Ast_GetField:
+			*(res_it+0) = curr;
+			*(res_it+1) = *it;
+			it += 1;
+			res_it += 2;
+			goto ExpectOperator;
 
 		case Ast_OpenPar:
 			curr.type = Ast_Call;
 		case Ast_GetProcedure:
-			CHECK_OPER_STACK_OVERFLOW(it->pos);
 			if (it->type == Ast_EndScope){
 				it += 1;
 				curr.count = 0;
 				goto SimplePostfixOperator;
 			}
+		SimplePostfixScope:
 			curr.count = 1;
+			CHECK_OPER_STACK_OVERFLOW(it->pos);
 			opers[opers_size] = curr; opers_size += 1;
 			goto ExpectValue;
+
+		case Ast_Subscript:
+			if (it->type == Ast_EndScope){
+				it += 1;
+				curr.type = Ast_Span;
+				goto SimplePostfixOperator;
+			}
+			goto SimplePostfixScope;
+
+		case Ast_FieldSubscript:
+			if (it->type == Ast_EndScope)
+				RETURN_ERROR("missing argument for field subscript", curr.pos);
+			goto SimplePostfixScope;
 
 		case Ast_EndScope:
 			goto HandleEndOfScope;
@@ -849,8 +858,7 @@ ExpectValue:{
 		}
 	}
 
-// Procedure nodes schematic:
-// (Procedure flags argcount pos) (...args) (StartScope body_size) (...body) (EndScope pos)
+
 	HandleEndOfScope:{
 		opers_size -= 1;
 		AstNode sc = opers[opers_size];
@@ -863,8 +871,10 @@ ExpectValue:{
 		
 		case Ast_Call:
 		case Ast_GetProcedure:
-			if (sc.count != 0)
-				RETURN_ERROR("parenthesis contain too many expressions", sc.pos);
+			*res_it = sc; res_it += 1;
+			goto ExpectOperator;
+
+		case Ast_Subscript:
 			*res_it = sc; res_it += 1;
 			goto ExpectOperator;
 
@@ -872,6 +882,12 @@ ExpectValue:{
 			sc.type = Ast_ProcedureClass;
 			opers[opers_size] = sc; opers_size += 1;
 			goto ExpectValue;
+		
+		case Ast_FieldSubscript:
+			if (sc.count != 1)
+				RETURN_ERROR("field subscript takes a single argument", sc.pos);
+			*res_it = sc; res_it += 1;
+			goto ExpectOperator;
 
 		case Ast_OpenProcedure:{
 			AstNode open_node = { .type = Ast_StartScope, .pos = (it-1)->pos };

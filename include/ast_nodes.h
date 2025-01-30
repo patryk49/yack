@@ -22,16 +22,15 @@
 	X(Import, 0, 0, 1, 1), \
 \
 /* POSTFIX OPERATORS */ \
-	X(Dereference,    140, 0, 1, 1), \
-	X(GetField,       140, 0, 2, 2), \
-	X(Span,           140, 0, 1, 1), \
-	X(Subscript,      140, 0, 1, 1), \
-	X(Call,           140, 0, 1, 1), \
-	X(GetProcedure,   140, 0, 1, 1), \
-	X(FieldSubscript, 140, 0, 1, 1), \
-	X(Initialize,     130, 0, 1, 1), \
-	X(OpenScope,       30, 0, 1, 1), \
-	X(Condition,       59, 0, 1, 1), \
+	X(Dereference,    140, 255, 1, 1), \
+	X(GetField,       140, 255, 2, 2), \
+	X(Span,           140, 255, 1, 1), \
+	X(Call,           140,   0, 1, 1), \
+	X(GetProcedure,   140,   0, 1, 1), \
+	X(Subscript,      140,   0, 1, 1), \
+	X(FieldSubscript, 140,   0, 1, 1), \
+	X(Initialize,     130,   0, 1, 1), \
+	X(OpenScope,       30,   0, 1, 1), \
 \
 /* PREFIX OPERATORS */ \
 	X(Plus,           255, 120, 1, 1), \
@@ -53,11 +52,7 @@
 	X(OpenPar,            140, 0, 1, 1), \
 	X(OpenProcedure,      140, 0, 1, 1), \
 	X(OpenProcedureClass, 140, 0, 1, 1), \
-	X(OpenBracket,        140, 0, 1, 1), \
 	X(OpenBrace,           30, 0, 1, 1), \
-	X(OpenDotPar,         140, 0, 1, 1), \
-	X(OpenDotBracket,     140, 0, 1, 1), \
-	X(OpenDotBrace,       110, 0, 1, 1), \
 	X(OpenBlock,          255, 0, 1, 1), \
 \
 /* BINARY ASSIGNMENTS */ \
