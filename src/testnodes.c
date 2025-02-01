@@ -169,6 +169,19 @@ void print_tokens(AstArray tokens){
 			if (node.flags & AstFlag_Initialized){ printf("Initialized "); }
 			if (node.flags & AstFlag_Constant   ){ printf("Constant");     }
 			break;
+		case Ast_Character:{
+			char repr[8] = {0};
+			utf8_write(repr, data.code);
+			printf(": code = %u, repr = \"%s\"", data.code, repr);
+			break;
+		}
+		case Ast_String:{
+			printf(
+				": size = %u, repr = \"%s\"", data.bufinfo.size,
+				(const char *)(global_bc + data.bufinfo.index)
+			);
+			break;
+		}
 		default: break;
 		}
 		putchar('\n');
@@ -232,8 +245,19 @@ void print_ast(AstArray ast){
 			if (node.flags & AstFlag_Initialized){ printf("Initialized "); }
 			if (node.flags & AstFlag_Constant   ){ printf("Constant");     }
 			break;
-		case Ast_Character:
-		case Ast_String:
+		case Ast_Character:{
+			char repr[8] = {0};
+			utf8_write(repr, data.code);
+			printf(": code = %u, repr = \"%s\"", data.code, repr);
+			break;
+		}
+		case Ast_String:{
+			printf(
+				": size = %u, repr = \"%s\"", data.bufinfo.size,
+				(const char *)(global_bc + data.bufinfo.index)
+			);
+			break;
+		}
 		default: break;
 		}
 		putchar('\n');

@@ -4,9 +4,18 @@
 #include "structs.h"
 
 
+
 #define ARRAY_SIZE_MAX (UINT32_MAX - 1)
 #define TUPLE_SIZE_MAX (400)
 #define ARG_COUNT_MAX TUPLE_SIZE_MAX
+
+
+// GLOBAL BYTECODE BUFFER
+#define BC_BUFFER_CAPACITY (1 << 27)
+BcNode *global_bc;
+size_t global_bc_size = 0;
+
+
 
 
 
@@ -403,6 +412,10 @@ static Class get_tuple_class(const Class *cls, size_t cls_size){
 
 // INITIALIZING GLOBAL VARIABLES
 static void initialize_compiler_globals(void){
+	// global bytecode buffer
+	global_bc = malloc(BC_BUFFER_CAPACITY*sizeof(BcNode));
+	assert(global_bc != NULL);
+
 	// class info data
 	global_classes.capacity = (1 << 24); // for now just make it big
 	global_classes.size = 0;

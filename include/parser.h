@@ -1,5 +1,3 @@
-#pragma once
-
 #include "utils.h"
 #include "unicode.h"
 #include "files.h"
@@ -477,22 +475,37 @@ static AstArray make_tokens(const char *input){
 			input += 1;
 
 			curr.type = Ast_Character;
-			curr_data.u64 = c;
+			curr_data.code = c;
 			goto AddTokenWithData;
 		}
 		
 		case '\"':{
 			input += 1;
-			size_t size = 0;
-			while (input[size] != '\"' || input[size-1] == '\\'){
-				if (input[size] == '\0')
-					RETURN_ERROR("unfinished string literal", position+size-1);
-				size += 1;
+			size_t data_size = 0;
+			BcNode *dest_node = global_bc + global_bc_size;
+			uint8_t *dest_data = (uint8_t *)(dest_node + 1);
+			while (*input != '\"'){
+				if (*input == '\0')
+					RETURN_ERROR("end of file inside of string literal", input-text_begin);
+				uint32_t c = parse_character(&input);
+				if (c == UINT32_MAX)
+					RETURN_ERROR("invalid character code", input-text_begin);
+				size_t code_size = utf8_write(dest_data, c);
+				dest_data += code_size;
+				data_size += code_size;
 			}
-			input += size + 1;
-
+			*dest_data = '\0';
+			input += 1;
+			*dest_node = (BcNode){
+				.type = BC_Data,
+				.size = (data_size + 1 + sizeof(BcNode) - 1) / sizeof(BcNode),
+				.data_size = data_size
+			};
 			curr.type = Ast_String;
-			curr_data.u64 = size;
+			curr_data.bufinfo.index = global_bc_size + 1;
+			curr_data.bufinfo.size  = data_size;
+			
+			global_bc_size += 1 + dest_node->size;
 			goto AddTokenWithData;
 		}
 

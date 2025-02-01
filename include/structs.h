@@ -1,5 +1,3 @@
-#pragma once
-
 #include "utils.h"
 #include "ast_nodes.h"
 
@@ -306,15 +304,22 @@ enum AstFlags{
 	AstFlag_Vectorize = 1 << 3,
 };
 
+typedef struct{
+	uint32_t index;
+	uint32_t size;
+} StaticBufInfo;
+
 typedef union Data{
 	uint8_t  bytes[8];
 	uint64_t u64;
+	uint32_t code;
 	float    f32;
 	double   f64;
 	Class    clas;
 	void    *ptr;
 	const char *text;
 	NameId name_id;
+	StaticBufInfo bufinfo;
 } Data;
 
 typedef union AstNode{
@@ -394,8 +399,10 @@ typedef union BcNode{
 	struct{
 		enum BcType  type  : 8;
 		enum BcFlags flags : 8;
-		uint16_t     debug_info;
-		uint32_t     size;
+		uint16_t     size;
+		union{
+			uint32_t data_size;
+		};
 	};
 	Data data;
 } BcNode;
