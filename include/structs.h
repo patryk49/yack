@@ -106,20 +106,12 @@ typedef union Class{
 				uint8_t  basic_alignment;
 				uint8_t  basic_flags;
 			};
-			uint32_t index;
+			uint32_t idx;
 			uint32_t bytesize; // for bytes
 			NameId   name_id; // for enum literal
 		};
 	};
 } Class;
-
-
-
-typedef struct ClassInfoArray{
-	Class    *data;
-	uint32_t  size;
-	uint32_t  capacity;
-} ClassInfoArray;
 
 
 
@@ -164,9 +156,12 @@ typedef struct ClassInfoArray{
 #undef DEFINE_BASIC_CLASS
 
 
-typedef struct ClassInfoHeader{
-	uint32_t bytesize  : 24;
-	uint8_t  alignment :  8;
+typedef union ClassInfoHeader{
+	struct{
+		uint32_t bytesize  : 24;
+		uint8_t  alignment :  8;
+	};
+	uint64_t _union_field_that_exists_in_here_for_alignment_purpuses;
 } ClassInfoHeader;
 
 typedef struct ArrayClassInfo{
@@ -175,7 +170,6 @@ typedef struct ArrayClassInfo{
 	uint32_t size;
 	Class    arg_class;
 } ArrayClassInfo;
-
 
 typedef struct TupleClassInfo{
 	uint32_t bytesize  : 24;
@@ -293,6 +287,50 @@ typedef struct DefaultsInfo{
 
 
 
+// PARSE TREE
+enum AstFlags{
+	AstFlag_Final = 1 << 0,
+
+// operator flags
+	AstFlag_Negate = 1 << 3,
+
+// variable flags
+	AstFlag_Constant    = 1 << 3,
+	AstFlag_Initialized = 1 << 4,
+	AstFlag_ClassSpec   = 1 << 5,
+
+// procedure flags
+	AstFlag_ReturnSpec = 1 << 3,
+
+// call flags
+	AstFlag_Vectorize = 1 << 3,
+};
+
+typedef union Data{
+	uint8_t  bytes[8];
+	uint64_t u64;
+	float    f32;
+	double   f64;
+	Class    clas;
+	void    *ptr;
+	const char *text;
+	NameId name_id;
+} Data;
+
+typedef union AstNode{
+	struct{
+		enum AstType type : 8;
+		uint8_t  flags;
+		uint16_t count;
+		uint32_t pos;
+	};
+	Data data;
+} AstNode;
+
+
+
+
+
 // BYTECODE
 enum BcType{
 	// compile time values
@@ -352,69 +390,14 @@ enum BcFlags{
 
 
 
-typedef struct SpanData{
-	uint8_t  *ptr;
-	uintptr_t size;
-} SpanData;
-
-typedef struct BcFmaInfo{
-	uint32_t offset;
-	uint32_t stride;
-} BcFmaInfo;
-
-typedef struct BcStoreInfo{
-	uint32_t bytesize;
-	uint32_t alignment;
-} BcStoreInfo;
-
-typedef struct BcNodeExtendInfo{
-	uint8_t from;
-	uint8_t to;
-} BcNodeExtendInfo;
-
-typedef struct BcVarInfo{
-	uint32_t index;
-	uint32_t bytesize;
-} BcVarInfo;
-
-typedef union BcData{
-	uint64_t    u64;
-	void       *ptr;
-	float       f32;
-	double      f64;
-	uint8_t     bytes[8];
-	Class       cl;
-	uint8_t    *address;
-	const char *error;
-} BcData;
-
-typedef union BcInfo{
-	Class cl;
-	uint8_t bytes[8];
-	BcData data;
-	uint8_t *address;
-	size_t size;
-	uint8_t *data_ptr;
-	struct BcInfo_Pack{
-		uint32_t count;
-		uint32_t discard_count;
-	} pack;
-	BcVarInfo   var;
-	BcFmaInfo   fma;
-	BcStoreInfo store;
-	struct BcInfo_Merge{
-		uint16_t split_count;
-		uint16_t splits[3];
-	} merge;
-} BcInfo;
-
-
-typedef struct BcNode{
-	enum BcType  type  : 8;
-	enum BcFlags flags : 8;
-	uint16_t     debug_info;
-	uint32_t     size;
-	BcInfo tail[];
+typedef union BcNode{
+	struct{
+		enum BcType  type  : 8;
+		enum BcFlags flags : 8;
+		uint16_t     debug_info;
+		uint32_t     size;
+	};
+	Data data;
 } BcNode;
 
 
@@ -426,105 +409,4 @@ typedef struct BcProcHeader{
 	bool is_pure   : 1;
 	bool is_const  : 1;
 } BcProcHeader;
-
-
-typedef struct BcArray{
-	BcNode  *data;
-	uint32_t size;
-	uint32_t capacity;
-} BcArray;
-
-
-enum NodeFlags{
-	NodeFlag_Terminal         = 1 << 0,
-	// flags for variables
-	NodeFlag_Constant         = 1 << 1,
-	NodeFlag_ClassSpec        = 1 << 2,
-	NodeFlag_Initialized      = 1 << 3,
-	NodeFlag_Parameter        = 1 << 4,
-	NodeFlag_DestructureField = 1 << 5,
-	NodeFlag_Destructure      = 1 << 6,
-	
-	// flags for control flow statements
-	NodeFlag_Comptime         = 1 << 1,
-	NodeFlag_HasIndex         = 1 << 2,
-	NodeFlag_Hot              = 1 << 3,
-	NodeFlag_Cold             = 1 << 4,
-
-	// flags for operations
-	NodeFlag_Negate           = 1 << 1,
-
-	NodeFlag_Modulo           = 1 << 2,
-	NodeFlag_Saturate         = 1 << 3,
-	NodeFlag_FullOperation    = 1 << 4,
-	
-	// flags for other things
-	NodeFlag_HasReturnClass   = 1 << 7,
-	NodeFlag_Broadcasted      = 1 << 8,
-//	NodeFlag_Aliasing         = 1 << 7,
-//	NodeFlag_AfterColon       = 1 << 7
-};
-
-
-typedef struct StaticMemory{
-	union{
-		uint8_t *start;
-		BcNode  *text;
-	};
-	Class   *classes;
-	uint8_t *names;
-	uint8_t *writable;
-	uint8_t *end;
-
-	BcNode  *text_top;
-	Class   *classes_top;
-	uint8_t *names_top;
-	uint8_t *writable_top;
-} StaticMemory;
-
-
-
-
-
-// PARSE TREE
-enum AstFlags{
-	AstFlag_Final = 1 << 0,
-
-// operator flags
-	AstFlag_Negate = 1 << 3,
-
-// variable flags
-	AstFlag_Constant    = 1 << 3,
-	AstFlag_Initialized = 1 << 4,
-	AstFlag_ClassSpec   = 1 << 5,
-
-// procedure flags
-	AstFlag_ReturnSpec = 1 << 3,
-
-// call flags
-	AstFlag_Vectorize = 1 << 3,
-};
-
-typedef union AstData{
-	uint8_t  bytes[8];
-	uint64_t u64;
-	float    f32;
-	double   f64;
-	void    *ptr;
-	const char *text;
-	NameId name_id;
-} AstData;
-
-typedef union AstNode{
-	struct{
-		enum AstType type : 8;
-		uint8_t  flags;
-		uint16_t count;
-		uint32_t pos;
-	};
-	AstData data;
-} AstNode;
-
-
-
 

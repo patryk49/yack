@@ -77,10 +77,7 @@ int main(int argc, char **argv){
 	}
 	read_time = clock() - read_time;
 
-	if (initialize_compiler()){
-		fprintf(stderr, "failed to initialize\n");
-		return 2137;
-	}
+	initialize_compiler_globals();
 
 	time_t tok_time = clock();
 	AstArray tokens = make_tokens(text.data);
@@ -140,7 +137,7 @@ int main(int argc, char **argv){
 void print_tokens(AstArray tokens){
 	for (size_t i=1; i!=tokens.end-tokens.data;){
 		AstNode node = tokens.data[i];
-		AstData data = tokens.data[i+1].data;
+		Data data = tokens.data[i+1].data;
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
 		i += TokenSizes[node.type];
 		switch (node.type){
@@ -181,7 +178,7 @@ void print_tokens(AstArray tokens){
 void print_ast(AstArray ast){
 	for (size_t i=1; i!=ast.end-ast.data;){
 		AstNode node = ast.data[i];
-		AstData data = ast.data[i+1].data;
+		Data data = ast.data[i+1].data;
 		if (!show_nops && node.type == Ast_Nop){ i+=1; continue; }
 		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
 		i += AstNodeSizes[node.type];

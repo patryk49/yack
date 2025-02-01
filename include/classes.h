@@ -3,8 +3,6 @@
 #include "utils.h"
 #include "structs.h"
 
-#include "bytecode.h"
-
 
 #define ARRAY_SIZE_MAX (UINT32_MAX - 1)
 #define TUPLE_SIZE_MAX (400)
@@ -126,31 +124,12 @@ static NameId get_name_id(const char *str, uint8_t length){
 }
 
 
-static bool init_name_id_set(size_t capacity){
-	assert(capacity >= 16);
-	assert(util_is_power2_u32(capacity));
-
-	global_name_set.size = 0;
-	global_name_set.capacity = capacity;
-	global_name_set.data = malloc(global_name_set.capacity*sizeof(struct NameEntry));
-	if (global_name_set.data == NULL) return true;
-	memset(global_name_set.data, 0, capacity*sizeof(struct NameEntry));
-
-	global_names.size = 0;
-	global_names.capacity = 3*capacity;
-	global_names.data = malloc(global_names.capacity*sizeof(struct NameEntry));
-	return global_names.data == NULL;
-}
 
 
-
-
-
-// GLOBAL CLASS TABLES
+// CLASS INFO FUNCTIONS 
 static uint64_t class_hash(Class cl){
 	return cl.id ^ (cl.id << 9u);
 }
-
 
 static bool class_is_pointer(Class cl){
 	return (cl.prefixes & PREFIX_MASK) == ClassPrefix_Pointer;
@@ -169,5 +148,298 @@ static Class class_add_prefix(Class cl, enum ClassPrefix prefix){
 static Class class_remove_prefix(Class cl){
 	cl.prefixes >>= PREFIX_SIZE;
 	return cl;
+}
+
+
+
+
+
+// CLASS INFO DATA
+struct ClassInfoArray{
+	ClassInfoHeader *data;
+	size_t size     : 32;
+	size_t capacity : 32;
+	struct ClassInfoArray *next;
+};
+
+struct ClassInfoArray global_classes;
+
+uint32_t global_classes_alloc(size_t size){
+	size_t alloc_size = (size + sizeof(ClassInfoHeader) - 1) / sizeof(ClassInfoHeader);
+	size_t new_size = global_classes.size + alloc_size;
+	if (new_size > global_classes.capacity){
+		assert(false && "class info array is out of memory");
+	}
+	size_t res = global_classes.size;
+	global_classes.size = new_size;
+	return res;
+}
+
+static uint32_t get_bytesize(Class cl){
+	if (class_is_pointer(cl)) return PTR_SIZE;
+	if (class_is_span(cl)) return 2*PTR_SIZE;
+	if (cl.tag < Class_Basic) return cl.basic_size;
+	return global_classes.data[cl.idx].bytesize;
+}
+
+static uint8_t get_alignment(Class cl){
+	if (class_is_pointer(cl) | class_is_span(cl)) return PTR_SIZE;
+	if (cl.tag < Class_Basic) return cl.basic_alignment;
+	return global_classes.data[cl.idx].alignment;
+}
+
+
+
+// ARRAY HASH TABLE
+static ArrayClassInfo *array_class_info(uint32_t index){
+	return (ArrayClassInfo *)(global_classes.data + index);
+}
+
+static uint64_t array_class_hash(Class cl, size_t size){
+	return class_hash(cl) ^ (size << 3);
+}
+
+struct ArrayClassEntry{
+	uint64_t hash;
+	Class clas; // id = 0 means empty slot
+};
+
+struct ArrayClassSet{
+	struct ArrayClassEntry *data;
+	size_t size     : 32;
+	size_t capacity : 32;
+};
+
+struct ArrayClassSet global_array_set;
+
+static Class get_array_class(Class cl, size_t size){
+	assert(util_is_power2_u32(global_array_set.capacity));
+
+	struct ArrayClassSet array_set = global_array_set;
+
+	uint64_t hash = array_class_hash(cl, size);
+	size_t index_mask = array_set.capacity - 1;
+	size_t index = hash & index_mask;
+	for (size_t i=0;; i+=1){
+		struct ArrayClassEntry entry = array_set.data[index];
+		if (entry.clas.id == 0) break; // name not found
+		if (entry.hash == hash){
+			const ArrayClassInfo *info = array_class_info(entry.clas.idx);
+			if (size == info->size && cl.id == info->arg_class.id) return entry.clas;
+		}
+		index = (index + i + 1) & index_mask;
+	}
+	
+	// add new entry's data
+	Class res = {
+		.tag = Class_Array,
+		.idx = global_classes_alloc(sizeof(ArrayClassInfo))
+	};
+	ArrayClassInfo *res_info = array_class_info(res.idx);
+	
+	*res_info = (ArrayClassInfo){
+		.bytesize = size*get_bytesize(cl),
+		.alignment = get_alignment(cl),
+		.size = size,
+		.arg_class = cl
+	};
+
+	// add new entry to set
+	array_set.data[index] = (struct ArrayClassEntry){ .hash = hash, .clas = res };
+	array_set.size += 1;
+	global_array_set.size = array_set.size;
+	
+	UNLIKELY if (4*array_set.size >= 3*array_set.capacity){
+		// resize hash table
+		size_t new_hs_capacity = 2*array_set.capacity;
+		size_t entry_bytesize = new_hs_capacity*sizeof(struct ArrayClassEntry);
+		struct ArrayClassEntry *new_hs_data = malloc(entry_bytesize);
+		if (new_hs_data == NULL){
+			assert(false && "name allocation failrule");
+		}
+		memset(new_hs_data, 0, entry_bytesize);
+		// reindex old hash table
+		size_t elem_index_mask = new_hs_capacity - 1;
+		for (size_t i=0; i!=array_set.capacity; i+=1){
+			struct ArrayClassEntry old_set_entry = array_set.data[i];
+			if (old_set_entry.clas.id != 0){
+				size_t elem_index = old_set_entry.hash & elem_index_mask;
+				for (size_t i=0;; i+=1){
+					struct ArrayClassEntry entry = new_hs_data[elem_index];
+					if (entry.clas.id == 0) break; // add elem to new table
+					elem_index = (elem_index + i + 1) & elem_index_mask;
+				}
+				new_hs_data[elem_index] = old_set_entry;
+			}
+		}
+		free(array_set.data);
+		global_array_set.data     = new_hs_data;
+		global_array_set.capacity = new_hs_capacity;
+	}
+	return res;
+}
+
+
+
+
+
+// TUPLE HASH TABLE
+static TupleClassInfo *tuple_class_info(uint32_t index){
+	return (TupleClassInfo *)(global_classes.data + index);
+}
+
+static uint64_t tuple_class_hash(const Class *cls, size_t cls_size){
+	if (cls_size == 0) return 13421;
+	return class_hash(cls[0]) ^ (cls_size << 3);
+}
+
+static uint64_t tuple_class_equals(
+	const Class *cls, size_t cls_size, const TupleClassInfo *info
+){
+	if (cls_size == info->size) return false;
+	for (size_t i=0; i!=cls_size; i+=1){
+		if (cls[i].id != info->arg_classes[i].id) return false;
+	}
+	return true;
+}
+
+struct TupleClassEntry{
+	uint64_t hash;
+	Class clas; // id = 0 means empty slot
+};
+
+struct TupleClassSet{
+	struct TupleClassEntry *data;
+	size_t size     : 32;
+	size_t capacity : 32;
+};
+
+struct TupleClassSet global_tuple_set;
+
+static Class get_tuple_class(const Class *cls, size_t cls_size){
+	assert(util_is_power2_u32(global_tuple_set.capacity));
+
+	struct TupleClassSet tuple_set = global_tuple_set;
+
+	uint64_t hash = tuple_class_hash(cls, cls_size);
+	size_t index_mask = tuple_set.capacity - 1;
+	size_t index = hash & index_mask;
+	for (size_t i=0;; i+=1){
+		struct TupleClassEntry entry = tuple_set.data[index];
+		if (entry.clas.id == 0) break; // name not found
+		if (entry.hash == hash){
+			const TupleClassInfo *info = tuple_class_info(entry.clas.idx);
+			if (tuple_class_equals(cls, cls_size, info)) return entry.clas;
+		}
+		index = (index + i + 1) & index_mask;
+	}
+	
+	// add new entry's data
+	Class res = {
+		.tag = Class_Tuple,
+		.idx = global_classes_alloc(sizeof(TupleClassInfo) + cls_size*sizeof(Class))
+	};
+	TupleClassInfo *res_info = tuple_class_info(res.idx);
+	
+	Class *res_classes = res_info->arg_classes;
+	uint32_t *res_offsets = (uint32_t *)(res_info->arg_classes + cls_size);
+
+	uint32_t bytesize = 0; 
+	uint8_t max_alignment = 0;
+	for (size_t i=0; i!=cls_size; i+=1){
+		res_classes[i] = cls[i];
+		res.infered |= cls[i].infered;
+		res.pointered |= cls[i].pointered;
+		if (!res.infered){
+			uint8_t arg_alignment = get_alignment(cls[i]);
+			bytesize = util_alignsize(bytesize, 1<<arg_alignment);
+			res_offsets[i] = bytesize;
+			if (arg_alignment > max_alignment){ max_alignment = arg_alignment; }
+			bytesize += get_bytesize(cls[i]);
+		}
+	}
+	*res_info = (TupleClassInfo){
+		.bytesize = util_alignsize(bytesize, 1<<max_alignment),
+		.alignment = max_alignment,
+		.size = cls_size
+	};
+
+	// add new entry to set
+	tuple_set.data[index] = (struct TupleClassEntry){ .hash = hash, .clas = res };
+	tuple_set.size += 1;
+	global_tuple_set.size = tuple_set.size;
+	
+	UNLIKELY if (4*tuple_set.size >= 3*tuple_set.capacity){
+		// resize hash table
+		size_t new_hs_capacity = 2*tuple_set.capacity;
+		size_t entry_bytesize = new_hs_capacity*sizeof(struct TupleClassEntry);
+		struct TupleClassEntry *new_hs_data = malloc(entry_bytesize);
+		if (new_hs_data == NULL){
+			assert(false && "name allocation failrule");
+		}
+		memset(new_hs_data, 0, entry_bytesize);
+		// reindex old hash table
+		size_t elem_index_mask = new_hs_capacity - 1;
+		for (size_t i=0; i!=tuple_set.capacity; i+=1){
+			struct TupleClassEntry old_set_entry = tuple_set.data[i];
+			if (old_set_entry.clas.id != 0){
+				size_t elem_index = old_set_entry.hash & elem_index_mask;
+				for (size_t i=0;; i+=1){
+					struct TupleClassEntry entry = new_hs_data[elem_index];
+					if (entry.clas.id == 0) break; // add elem to new table
+					elem_index = (elem_index + i + 1) & elem_index_mask;
+				}
+				new_hs_data[elem_index] = old_set_entry;
+			}
+		}
+		free(tuple_set.data);
+		global_tuple_set.data     = new_hs_data;
+		global_tuple_set.capacity = new_hs_capacity;
+	}
+	return res;
+}
+
+
+
+// INITIALIZING GLOBAL VARIABLES
+static void initialize_compiler_globals(void){
+	// class info data
+	global_classes.capacity = (1 << 24); // for now just make it big
+	global_classes.size = 0;
+	global_classes.data = malloc(global_classes.capacity*sizeof(ClassInfoHeader));
+	assert(global_classes.data != NULL);
+
+	// name set
+	global_name_set.capacity = 256;
+	global_name_set.size = 0;
+	size_t name_set_bytes = global_name_set.capacity*sizeof(struct NameEntry);
+	global_name_set.data = malloc(name_set_bytes);
+	assert(global_name_set.data != NULL);
+	memset(global_name_set.data, 0, name_set_bytes);
+	
+	// name data 
+	global_names.capacity = global_name_set.capacity*(1+8);
+	global_names.size = 0;
+	global_names.data = malloc(global_names.capacity);
+	assert(global_names.data != NULL);
+
+	// array set
+	global_array_set.capacity = 64;
+	global_array_set.size = 0;
+	size_t array_set_bytes = global_array_set.capacity*sizeof(struct ArrayClassEntry);
+	global_array_set.data = malloc(array_set_bytes);
+	assert(global_array_set.data != NULL);
+	memset(global_array_set.data, 0, array_set_bytes);
+
+	// tuple set
+	global_tuple_set.capacity = 64;
+	global_tuple_set.size = 0;
+	size_t tuple_set_bytes = global_tuple_set.capacity*sizeof(struct TupleClassEntry);
+	global_tuple_set.data = malloc(tuple_set_bytes);
+	assert(global_tuple_set.data != NULL);
+	memset(global_tuple_set.data, 0, tuple_set_bytes);
+
+	// keywords & directires
+	init_keyword_names();
 }
 

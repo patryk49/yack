@@ -7,16 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "structs.h"
-#include "bytecode.h"
 #include "classes.h"
 
-//#include "classes.h"
-static bool initialize_compiler(void){
-	init_keyword_names();
-	if (init_name_id_set(64)) return true;
-	return false;
-}
 
 static bool is_valid_name_char(char);
 static bool is_valid_first_name_char(char);
@@ -94,7 +86,7 @@ static AstNode *ast_array_push(AstArray *arr, AstNode node){
 	return res;	
 }
 
-static AstNode *ast_array_push2(AstArray *arr, AstNode node, AstData data){
+static AstNode *ast_array_push2(AstArray *arr, AstNode node, Data data){
 	if (arr->end+2 > arr->maxptr) ast_array_grow(arr);
 	AstNode *res = arr->end;
 	arr->end += 2;
@@ -132,7 +124,7 @@ static AstArray make_tokens(const char *input){
 	AstNode *prev_token = res.data;
 
 	AstNode curr;
-	AstData curr_data;
+	Data curr_data;
 
 	for (;;){
 		const char *prev_input = input;
@@ -623,7 +615,7 @@ ExpectValue:{
 		case Ast_String:
 		SimpleLiteral:
 			*res_it = curr;
-			(res_it+1)->data = *(AstData *)it;
+			(res_it+1)->data = *(Data *)it;
 			it += 1;
 			res_it += 2;
 			goto ExpectOperator;
@@ -672,7 +664,7 @@ ExpectValue:{
 			if (t!=Ast_OpenProcedure && t!=Ast_With && t!=Ast_StartScope)
 				RETURN_ERROR("variable cannot be defined in this context", curr.pos);
 			CHECK_OPER_STACK_OVERFLOW(curr.pos);
-			memcpy(opers+opers_size, it, sizeof(AstData));
+			memcpy(opers+opers_size, it, sizeof(Data));
 			opers_size += 1;
 			it += 1;
 			goto SimplePrefixOperator;
