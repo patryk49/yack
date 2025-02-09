@@ -132,7 +132,6 @@ typedef union Class{
 
 #define CLASS_VOID          BASIC_CLASS(Class_Void,         false, 0, 0)
 #define CLASS_ERROR         BASIC_CLASS(Class_Error,        false, 0, 0)
-#define CLASS_INFERED       BASIC_CLASS(Class_Infered,      true,  0, 0)
 #define CLASS_CLASS         BASIC_CLASS(Class_Class,        false, 8, 3)
 #define CLASS_U8            BASIC_CLASS(Class_Unsigned,     false, 1, 0)
 #define CLASS_U16           BASIC_CLASS(Class_Unsigned,     false, 2, 1)
@@ -462,7 +461,7 @@ typedef union{
 		uint32_t inext;
 	} freenode;
 	void *ptr;
-	Class cls;
+	Class clas;
 	Data data;
 } BcNode;
 

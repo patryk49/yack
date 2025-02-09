@@ -484,7 +484,7 @@ static AstArray make_tokens(const char *input){
 			input += 1;
 			size_t data_size = 0;
 			BcNode *dest_node = global_bc + global_bc_size;
-			uint8_t *dest_data = (uint8_t *)(dest_node + 1);
+			uint8_t *dest_data = (uint8_t *)(dest_node + 2);
 			while (*input != '\"'){
 				if (*input == '\0')
 					RETURN_ERROR("end of file inside of string literal", input-text_begin);
@@ -497,16 +497,14 @@ static AstArray make_tokens(const char *input){
 			}
 			*dest_data = '\0';
 			input += 1;
-			*dest_node = (BcNode){
-				.type = BC_Data,
-				.size = (data_size + 1 + sizeof(BcNode) - 1) / sizeof(BcNode),
-				.data_size = data_size
-			};
+			*dest_node = (BcNode){ .type = BC_Data, };
+			(dest_node+1)->clas = (Class){ .tag = Class_Bytes, .bytesize = data_size };
+
 			curr.type = Ast_String;
-			curr_data.bufinfo.index = global_bc_size + 1;
+			curr_data.bufinfo.index = global_bc_size + 2;
 			curr_data.bufinfo.size  = data_size;
 			
-			global_bc_size += 1 + dest_node->size;
+			global_bc_size += 2 + (data_size + 2 + sizeof(BcNode) - 1)/sizeof(BcNode);
 			goto AddTokenWithData;
 		}
 
