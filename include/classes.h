@@ -15,6 +15,9 @@
 BcNode *global_bc;
 size_t global_bc_size = 0;
 
+// initialize bytecode linked list
+BcNode global_bc_head;
+BcNode *global_bc_last = &global_bc_head;
 
 
 
@@ -157,6 +160,10 @@ static Class class_add_prefix(Class cl, enum ClassPrefix prefix){
 static Class class_remove_prefix(Class cl){
 	cl.prefixes >>= PREFIX_SIZE;
 	return cl;
+}
+
+static bool class_has_pointer(Class cl){
+	return cl.pointered || (cl.prefixes & PREFIX_HAS_PTR_MASK) != 0;
 }
 
 
@@ -410,6 +417,13 @@ static Class get_tuple_class(const Class *cls, size_t cls_size){
 
 
 
+// PROCEDURE HALPER PROCEDURES
+static ProcedureClassInfo *procedure_class_info(uint32_t index){
+	return (ProcedureClassInfo *)(global_classes.data + index);
+}
+
+
+
 // INITIALIZING GLOBAL VARIABLES
 static void initialize_compiler_globals(void){
 	// global bytecode buffer
@@ -456,3 +470,62 @@ static void initialize_compiler_globals(void){
 	init_keyword_names();
 }
 
+
+static const char *infer_argument_class(Class source, Class *target_ptr, Data *infers){
+	Class target = *target_ptr;
+	assert(source.tag == Class_Initlist || !source.infered);
+	assert(target.infered);
+
+	if (source.tag == Class_Initlist){
+		// TODO: infer target as tuple
+		assert(false && "infering init list in unimplemented");
+	}
+	
+	switch (target.tag){
+	case Class_Infered:
+		if (target.infro.is_reference){
+			infers[target.infro.var_index].clas = source;
+		} else if (target.infro.is_field_access){
+			// TODO: get fields data 
+		} else{
+			source = infers[target.infro.var_index].clas;
+		}
+		break;
+	case Class_Array:{
+		if (source.tag != target.tag)
+			return "argument's class doesn\'t match the target";
+		ArrayClassInfo *target_info = array_class_info(target.idx);
+		ArrayClassInfo *source_info = array_class_info(source.idx);
+		Class target_arg = target_info->arg_class;
+		if (target_info->size < 0){
+			infers[1-target_info->size].u64 = source_info->size;
+		}
+		if (target_arg.infered){
+			Class source_arg = source_info->arg_class;
+			const char *err = infer_argument_class(source_arg, &target_arg, infers);
+			if (err != NULL) return err;
+			source = get_array_class(target_arg, source_info->size);
+		}
+		break;
+	}
+
+	default: break;
+	}
+
+	source.prefixes = target.prefixes;
+	*target_ptr = source;
+	return NULL;	
+}
+
+
+static const char *match_argument(ValueInfo *arg, Class target, bool ctime, Data *infers){
+	Class source = arg->clas;
+	if (ctime && !(arg->flags & VF_Const))
+		return "provided argument is not known at compile time";
+	
+	if (target.infered){
+		const char *err = infer_argument_class(source, &target, infers);
+		if (err != NULL) return err;
+	}
+	arg->clas = target;
+}

@@ -48,7 +48,7 @@ typedef int32_t  VarIndex;
 #define PREFIX_MASK         0xfu
 #define PREFIX_HAS_PTR_MASK 0x888888u
 
-
+#define MAX_INFERED_COUNT 16
 
 
 
@@ -66,10 +66,9 @@ enum ClassTag{
 	Class_Void =  0,
 	Class_Error, 
 	Class_Infered,
+	Class_Initlist,
 	Class_Bytes,
 	Class_Class,
-	Class_InferedTuple,
-	Class_EmptyTuple,
 	Class_Unsigned,
 	Class_Integer,
 	Class_Bool,
@@ -91,6 +90,15 @@ enum ClassTag{
 };
 
 
+
+typedef struct{
+	uint8_t var_index;
+	bool is_reference    : 1;
+	bool is_field_access : 1;
+	uint16_t field_index;
+} InferedInfo;
+
+
 typedef union Class{
 	uint64_t id;
 	struct{
@@ -104,9 +112,10 @@ typedef union Class{
 				uint8_t  basic_alignment;
 				uint8_t  basic_flags;
 			};
-			uint32_t idx;
-			uint32_t bytesize; // for bytes
-			NameId   name_id; // for enum literal
+			uint32_t    idx;
+			uint32_t    bytesize; // for bytes
+			NameId      name_id;  // for enum literal
+			InferedInfo infro;
 		};
 	};
 } Class;
@@ -125,8 +134,6 @@ typedef union Class{
 #define CLASS_ERROR         BASIC_CLASS(Class_Error,        false, 0, 0)
 #define CLASS_INFERED       BASIC_CLASS(Class_Infered,      true,  0, 0)
 #define CLASS_CLASS         BASIC_CLASS(Class_Class,        false, 8, 3)
-#define CLASS_INFERED_TUPLE BASIC_CLASS(Class_InferedTuple, true,  0, 0)
-#define CLASS_EMPTY_TUPLE   BASIC_CLASS(Class_EmptyTuple,   false, 0, 0)
 #define CLASS_U8            BASIC_CLASS(Class_Unsigned,     false, 1, 0)
 #define CLASS_U16           BASIC_CLASS(Class_Unsigned,     false, 2, 1)
 #define CLASS_U32           BASIC_CLASS(Class_Unsigned,     false, 4, 2)
@@ -154,6 +161,7 @@ typedef union Class{
 #undef DEFINE_BASIC_CLASS
 
 
+
 typedef union ClassInfoHeader{
 	struct{
 		uint32_t bytesize  : 24;
@@ -165,7 +173,7 @@ typedef union ClassInfoHeader{
 typedef struct ArrayClassInfo{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
-	uint32_t size;
+	int32_t  size; // negative means infered size
 	Class    arg_class;
 } ArrayClassInfo;
 
@@ -248,7 +256,7 @@ typedef struct ProcedureClassInfo{
 	uint8_t  alignment :  8;
 	uint8_t  arg_count;
 	uint8_t  default_count;
-	uint8_t  state;
+	bool     has_single_implementation;
 
 	uint16_t comptime_flags;
 
@@ -270,8 +278,8 @@ typedef struct ProcedureClassInfo{
 	
 	uint32_t body_index;
 	
-	Class classes[]; // variable size field
-// NameId  name_ids[]; // pretend it exists
+	Class   arg_classes[]; // variable size field
+// NameId  arg_name_ids[]; // pretend it exists
 // BcNode  defaults[]; // pretend it exists
 } ProcedureClassInfo;
 
@@ -298,10 +306,8 @@ enum AstFlags{
 	AstFlag_ClassSpec   = 1 << 5,
 
 // procedure flags
-	AstFlag_ReturnSpec = 1 << 3,
-
-// call flags
-	AstFlag_Vectorize = 1 << 3,
+	AstFlag_DirectName = 1 << 3,
+	AstFlag_ReturnSpec = 1 << 4,
 };
 
 typedef struct{
@@ -331,6 +337,55 @@ typedef union AstNode{
 	};
 	Data data;
 } AstNode;
+
+
+
+
+
+// SEMENTIC ALALYSIS REALTED STRUCTS
+enum ValueFlags{
+	VF_Const  = 0,
+	VF_Big,
+	VF_Dependant,
+};
+
+
+typedef struct{
+	Class clas;
+	uint32_t ast_index;
+	uint32_t flags;
+	union{
+		Data data;
+		struct{
+			uint32_t data_idx;
+			uint32_t node_idx;
+		};
+	};
+} ValueInfo;
+
+
+enum ScopeType{
+	Scope_Global,
+	Scope_Proc,
+	Scope_Block,
+	Scope_If,
+	Scope_Else,
+	Scope_For,
+	Scope_While
+};
+
+typedef struct{
+	enum ScopeType type : 8;
+	uint32_t count : 24;
+	uint32_t bc_start;
+	uint32_t value_start;
+	uint32_t variable_start;
+} ScopeInfo;
+
+typedef struct{
+	uint32_t name_id;
+	uint32_t bc_pos;
+} VariableInfo;
 
 
 
@@ -390,20 +445,24 @@ enum BcType{
 
 
 enum BcFlags{
-	BCF_Labeled = 1 << 0,
+	BCF_Labeled = 1 << 1,
 };
 
 
 
-typedef union BcNode{
+typedef union{
 	struct{
 		enum BcType  type  : 8;
 		enum BcFlags flags : 8;
-		uint16_t     size;
-		union{
-			uint32_t data_size;
-		};
+		uint16_t count;
+		uint32_t inext;
 	};
+	struct{ // used for freelist
+		uint32_t size;
+		uint32_t inext;
+	} freenode;
+	void *ptr;
+	Class cls;
 	Data data;
 } BcNode;
 

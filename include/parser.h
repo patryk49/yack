@@ -296,6 +296,7 @@ static AstArray make_tokens(const char *input){
 		case '(': input += 1;
 			PUSH_SCOPE(Ast_OpenPar);
 			curr.type = Ast_OpenPar;
+			if (prev_token->type == Ast_Identifier){ curr.flags = AstFlag_DirectName; }
 			goto AddToken;
 
 		case ')':{ input += 1;
@@ -1128,21 +1129,32 @@ Return:
 static void print_codeline(const char *text, size_t position){
 	size_t row = 0;
 	size_t col = 0;
+	size_t row_position_prev = 0;
 	size_t row_position = 0;
 
 	for (size_t i=0; i!=position; ++i){
 		col += 1;
 		if (text[i]=='\n' || text[i]=='\v'){
+			row_position_prev = row_position;
 			row_position += col;
 			row += 1;
 			col = 0;
 		}
 	}
-	fprintf(stderr, " -> row: %lu, column: %lu\n", row, col);
+	fprintf(stderr, " -> row: %lu, column: %lu\n>\n", row, col);
 
-	putchar('>');
-	putchar('\n');
-	
+	if (row != 0){
+		putchar('>');
+		putchar(' ');
+		putchar(' ');
+		for (size_t i=row_position_prev;; ++i){
+			char c = text[i];
+			if (c=='\0' || c=='\n' || c=='\v') break;
+			putchar(c);
+		}
+		putchar('\n');
+	}
+
 	putchar('>');
 	putchar(' ');
 	putchar(' ');

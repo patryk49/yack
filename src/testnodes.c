@@ -211,7 +211,6 @@ void print_ast(AstArray ast){
 		case Ast_Subscript:
 		case Ast_FieldSubscript:
 			printf(": arg_count = %lu ", node.count);
-			if (node.flags & AstFlag_Vectorize){ printf("Vectorize "); }
 			break;
 		case Ast_StartScope:
 			printf(": scope_size = %u", node.pos);
