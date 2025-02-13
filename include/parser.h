@@ -1086,6 +1086,38 @@ static uint64_t parse_number_hex(const char **src_it){
 	return res;
 }
 
+static uint64_t parse_number_roman(const char **src_it){
+	const char *src = *src_it;
+	size_t res = 0;
+
+	size_t last_size = 0;
+	size_t last_count = 0;
+
+	static const uint16_t Values[] = {1000,900,500,400,100,90,50,40,10,9,5,4,1};
+	static const char FirstChars[] = "MCDCCXLXXIVII";
+	static const char LastChars[] = "MDCLXV";
+	for (size_t i=0; i!=SIZE(Values); i+=1){
+		const char *next = src;
+		while (next+=1, *next== '_');
+		if (i & 1){
+			while (*src == FirstChars[i] && *next == LastChars[i/2]){
+				res += Values[i];
+				while (next+=1, *next== '_');
+				src = next;
+				while (next+=1, *next== '_');
+			}
+		} else{
+			while (*src == FirstChars[i]){
+				res += Values[i];
+				src = next;
+				while (next+=1, *next== '_');
+			}
+		}
+	}
+
+	*src_it = src;
+	return res;
+}
 
 static enum AstType parse_number(void *res_data, const char **src_it){
 	const char *src = *src_it;
@@ -1099,6 +1131,7 @@ static enum AstType parse_number(void *res_data, const char **src_it){
 		case 'b': src += 1; res_u64 = parse_number_bin(&src); goto Return;
 		case 'o': src += 1; res_u64 = parse_number_oct(&src); goto Return;
 		case 'x': src += 1; res_u64 = parse_number_hex(&src); goto Return;
+		case 'r': src += 1; res_u64 = parse_number_roman(&src); goto Return;
 		default: break;
 		}
 	}
