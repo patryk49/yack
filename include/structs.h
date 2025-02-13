@@ -1,7 +1,8 @@
 #include "utils.h"
 #include "ast_nodes.h"
 
-
+// this must be less or equal to 16
+#define MAX_PARAM_COUNT 12
 
 typedef uint32_t NameId;
 typedef int32_t  VarIndex;
@@ -65,38 +66,34 @@ enum ClassTag{
 	// basic classes
 	Class_Void =  0,
 	Class_Error, 
+	Class_Expr,
 	Class_Infered,
-	Class_Initlist,
-	Class_Bytes,
 	Class_Class,
+	Class_Bytes,
 	Class_Unsigned,
 	Class_Integer,
 	Class_Bool,
 	Class_Float,
 	
-	Class_Basic,
-
-	// complex classes
-	Class_Procedure,
-	Class_Struct,
+	// compile time only
+	Class_Initlist,
+	Class_EnumLiteral,
+	
+	// builtin complex classes
 	Class_Array,
 	Class_Tuple,
 	Class_ProcPointer,
-	Class_Enum,
 	Class_StrideSpan,
 	Class_NumberRange,
-	Class_Module,
-	Class_EnumLiteral
+
+	//	user defined classes
+	Class_Procedure,
+	Class_Struct,
+	Class_Enum,
+	Class_Module
 };
 
 
-
-typedef struct{
-	uint8_t var_index;
-	bool is_reference    : 1;
-	bool is_field_access : 1;
-	uint16_t field_index;
-} InferedInfo;
 
 
 typedef union Class{
@@ -115,7 +112,6 @@ typedef union Class{
 			uint32_t    idx;
 			uint32_t    bytesize; // for bytes
 			NameId      name_id;  // for enum literal
-			InferedInfo infro;
 		};
 	};
 } Class;
@@ -253,7 +249,7 @@ typedef struct InstanceInfo{
 typedef struct ProcedureClassInfo{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
-	uint8_t  arg_count;
+	uint8_t  param_count;
 	uint8_t  default_count;
 	bool     has_single_implementation;
 
@@ -277,16 +273,11 @@ typedef struct ProcedureClassInfo{
 	
 	uint32_t body_index;
 	
-	Class   arg_classes[]; // variable size field
-// NameId  arg_name_ids[]; // pretend it exists
-// BcNode  defaults[]; // pretend it exists
+	Class    arg_classes[];  // variable size field
+// NameId   arg_name_ids[]; // pretend it exists
+// uint32_t arg_defaults[];     // pretend it exists
 } ProcedureClassInfo;
 
-
-typedef struct DefaultsInfo{
-	Class    *cls;
-	uint32_t *bcs;
-} DefaultsInfo;
 
 
 
@@ -331,7 +322,13 @@ typedef union AstNode{
 	struct{
 		enum AstType type : 8;
 		uint8_t  flags;
-		uint16_t count;
+		union{
+			uint16_t count;
+			struct{ // for procedure node
+				uint8_t param_count;
+				uint8_t default_count;
+			};
+		};
 		uint32_t pos;
 	};
 	Data data;
@@ -351,7 +348,7 @@ enum ValueFlags{
 
 typedef struct{
 	Class clas;
-	uint32_t ast_index;
+	uint32_t ast_start; // index of first node of expression coresponding to this value
 	uint32_t flags;
 	union{
 		Data data;
@@ -365,6 +362,7 @@ typedef struct{
 
 enum ScopeType{
 	Scope_Global,
+	Scope_Params,
 	Scope_Proc,
 	Scope_Block,
 	Scope_If,
@@ -375,10 +373,11 @@ enum ScopeType{
 
 typedef struct{
 	enum ScopeType type : 8;
-	uint32_t count : 24;
-	uint32_t bc_start;
-	uint32_t value_start;
-	uint32_t variable_start;
+	uint16_t module_id; // 0 means the current scope
+	uint16_t count;
+	union{
+		ProcedureClassInfo *procinfo;
+	};
 } ScopeInfo;
 
 typedef struct{

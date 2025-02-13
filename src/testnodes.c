@@ -142,7 +142,6 @@ void print_tokens(AstArray tokens){
 		i += TokenSizes[node.type];
 		switch (node.type){
 		case Ast_Terminator: return;
-		case Ast_Procedure: break;
 		case Ast_Unsigned:
 			printf(": %lu", data.u64);
 			break;
@@ -198,6 +197,10 @@ void print_ast(AstArray ast){
 		switch (node.type){
 		case Ast_Terminator: return;
 		case Ast_Procedure:
+			printf(
+				": param_count = %u, default_count = %u",
+				(unsigned)node.param_count, (unsigned)node.default_count
+			);
 			if (node.flags){
 				printf(",  flags = ");
 				if (node.flags & AstFlag_ReturnSpec){ printf("ReturnSpec "); }

@@ -592,7 +592,7 @@ static AstArray parse_tokens(AstArray tokens){
 	AstNode opers[512];
 	size_t opers_size = 1;
 	
-	opers[0] = (AstNode){ .type = Ast_Terminator };
+	opers[0] = (AstNode){ .type = Ast_StartScope, .flags = 0xff };
 
 	AstNode *it = tokens.data + 1;
 	AstNode *res_it = it;
@@ -702,7 +702,7 @@ ExpectValue:{
 		case Ast_OpenProcedureClass:{
 			if (it->type == Ast_EndScope){
 				it += 1;
-				curr.type = Ast_ProcedureClass;	
+				curr.type = Ast_ProcedureClass;
 				curr.count = 0;
 				goto SimplePrefixOperator;
 			}
@@ -722,6 +722,8 @@ ExpectValue:{
 				*res_it = open_node; res_it += 1;
 				goto ExpectValue;
 			}
+			curr.pos = res_it - tokens.data - 1;
+			curr.count = 1;
 			goto SimplePrefixOperator;
 		}
 
@@ -777,8 +779,18 @@ ExpectValue:{
 					varnode.type == Ast_Variable &&
 					(varnode.flags & (AstFlag_ClassSpec|AstFlag_Constant))
 				){
-					varnode.flags |= (AstFlag_ClassSpec|AstFlag_Initialized);
-					opers[opers_size-1] = varnode;
+					if (opers[opers_size-3].type == Ast_OpenProcedure){
+						*(res_it+0) = varnode;
+						*(res_it+1) = opers[opers_size-2];
+						res_it += 2;
+						curr.type = Ast_DefaultParam;
+						opers[opers_size-3].flags += 1;
+						opers[opers_size-2] = curr;
+						opers_size -= 1;
+					} else{
+						varnode.flags |= (AstFlag_ClassSpec|AstFlag_Initialized);
+						opers[opers_size-1] = varnode;
+					}
 					goto ExpectValue;
 				}
 			}
@@ -894,6 +906,11 @@ ExpectValue:{
 			goto ExpectOperator;
 
 		case Ast_OpenProcedure:{
+			AstNode *procnode = tokens.data + sc.pos;
+			if (sc.count > MAX_PARAM_COUNT)
+				RETURN_ERROR("procedure has too many parameters", procnode->pos);
+			procnode->param_count = sc.count;
+			procnode->default_count = sc.flags;
 			AstNode open_node = { .type = Ast_StartScope, .pos = (it-1)->pos };
 			it += 2;
 			AstNode open_oper = { .type = Ast_Procedure, .pos = res_it - tokens.data };
@@ -916,8 +933,9 @@ ExpectValue:{
 	}
 	
 EndOfFile:
-	if (opers[opers_size-1].type != Ast_Terminator)
+	if (opers[opers_size-1].type != Ast_StartScope || opers[opers_size-1].flags != 0xff){
 		RETURN_ERROR("unexpected end of file", (it-1)->pos-1);
+	}
 	*res_it = (AstNode){ .type = Ast_Terminator };
 	tokens.end = res_it;
 ReturnError:

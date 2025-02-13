@@ -194,15 +194,17 @@ uint32_t global_classes_alloc(size_t size){
 static uint32_t get_bytesize(Class cl){
 	if (class_is_pointer(cl)) return PTR_SIZE;
 	if (class_is_span(cl)) return 2*PTR_SIZE;
-	if (cl.tag < Class_Basic) return cl.basic_size;
+	if (cl.tag <= Class_Float) return cl.basic_size;
 	return global_classes.data[cl.idx].bytesize;
 }
 
 static uint8_t get_alignment(Class cl){
 	if (class_is_pointer(cl) | class_is_span(cl)) return PTR_SIZE;
-	if (cl.tag < Class_Basic) return cl.basic_alignment;
+	if (cl.tag <= Class_Float) return cl.basic_alignment;
 	return global_classes.data[cl.idx].alignment;
 }
+
+
 
 
 
@@ -476,23 +478,13 @@ static const char *infer_argument_class(Class source, Class *target_ptr, Data *i
 	assert(source.tag == Class_Initlist || !source.infered);
 	assert(target.infered);
 
-	if (source.tag == Class_Initlist){
-		// TODO: infer target as tuple
-		assert(false && "infering init list in unimplemented");
-	}
-	
 	switch (target.tag){
 	case Class_Infered:
-		if (target.infro.is_reference){
-			infers[target.infro.var_index].clas = source;
-		} else if (target.infro.is_field_access){
-			// TODO: get fields data 
-		} else{
-			source = infers[target.infro.var_index].clas;
-		}
+		//infers[target.infro.var_index].clas = source;
+		//source = infers[target.infro.var_index].clas;
 		break;
 	case Class_Array:{
-		if (source.tag != target.tag)
+		if (source.tag != Class_Array)
 			return "argument's class doesn\'t match the target";
 		ArrayClassInfo *target_info = array_class_info(target.idx);
 		ArrayClassInfo *source_info = array_class_info(source.idx);

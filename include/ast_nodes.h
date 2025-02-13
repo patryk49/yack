@@ -106,12 +106,12 @@
 \
 /* OTHER EXPRESSINS */ \
 	X(Variable,       11, 36, 2, 2), \
-	X(VariableSymbol, 11, 36, 1, 1), \
 \
 /* SEPARATORS */ \
-	X(Semicolon,  10, 0, 1, 1), \
-	X(Terminator, 10, 0, 1, 1), \
-	X(Comma,      18, 0, 1, 1), \
+	X(Semicolon,     10, 0, 1, 1), \
+	X(Terminator,    10, 0, 1, 1), \
+	X(Comma,         18, 0, 1, 1), \
+	X(DefaultParam, 255, 19, 0, 1), \
 \
 	X(StartScope, 10, 0, 1, 1), \
 \
