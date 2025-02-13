@@ -246,7 +246,7 @@ static AstArray make_tokens(const char *input){
 			if (*input == '='){
 				input += 1;
 				curr.type  = Ast_Greater;
-				curr.count = AstFlag_Negate;
+				curr.flags = AstFlag_Negate;
 			} else if (*input == '>'){
 				input += 1;
 				curr.type = Ast_Concat;
@@ -262,7 +262,7 @@ static AstArray make_tokens(const char *input){
 			if (*input == '='){
 				input += 1;
 				curr.type = Ast_Less;
-				curr.count = AstFlag_Negate;
+				curr.flags = AstFlag_Negate;
 			} else if (*input == '>'){
 				input += 1;
 				curr.type = Ast_ShiftRight;
@@ -275,7 +275,7 @@ static AstArray make_tokens(const char *input){
 			goto AddToken;
 
 		case '!': input += 1;
-			curr.count = AstFlag_Negate;
+			curr.flags = AstFlag_Negate;
 			if (*input == '='){
 				input += 1;
 				curr.type  = Ast_Equal;
@@ -345,10 +345,10 @@ static AstArray make_tokens(const char *input){
 		case '^': input += 1;
 			if (*input == '|'){
 				curr.type  = Ast_BitOr;
-				curr.count = AstFlag_Negate;
+				curr.flags = AstFlag_Negate;
 				input += 1;
 			} else if (*input == '&'){
-				curr.count = AstFlag_Negate;
+				curr.flags = AstFlag_Negate;
 				curr.type  = Ast_BitAnd;
 				input += 1;
 			} else{

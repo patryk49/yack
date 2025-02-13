@@ -181,6 +181,18 @@ void print_tokens(AstArray tokens){
 			);
 			break;
 		}
+		case Ast_Equal:
+		case Ast_Less:
+		case Ast_Greater:
+		case Ast_LogicOr:
+		case Ast_LogicAnd:
+		case Ast_Contains:
+		case Ast_BitOr:
+		case Ast_BitAnd:
+			if (node.flags & AstFlag_Negate){
+				printf(": Negate");
+			}
+			break;
 		default: break;
 		}
 		putchar('\n');
@@ -260,6 +272,18 @@ void print_ast(AstArray ast){
 			);
 			break;
 		}
+		case Ast_Equal:
+		case Ast_Less:
+		case Ast_Greater:
+		case Ast_LogicOr:
+		case Ast_LogicAnd:
+		case Ast_Contains:
+		case Ast_BitOr:
+		case Ast_BitAnd:
+			if (node.flags & AstFlag_Negate){
+				printf(": Negate");
+			}
+			break;
 		default: break;
 		}
 		putchar('\n');
