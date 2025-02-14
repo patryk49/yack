@@ -125,9 +125,10 @@
 	X(String,      255, 0, 2, 2), \
 \
 /* SMALL VALUES */ \
-	X(Self,    255, 0, 1, 1), \
-	X(Infered, 255, 0, 1, 1), \
-	X(Ignored, 255, 0, 1, 1), \
+	X(Self,         255, 0, 1, 1), \
+	X(Infered,      255, 0, 1, 1), \
+	X(Ignored,      255, 0, 1, 1), \
+	X(NamedInfered, 255, 0, 2, 2), \
 \
 /* BIG VALUES */ \
 	X(Tuple, 255, 0, 1, 1), \

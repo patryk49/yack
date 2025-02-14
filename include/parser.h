@@ -370,8 +370,17 @@ static AstArray make_tokens(const char *input){
 			goto AddToken;
 
 		case '$': input += 1;
+			if (is_valid_first_name_char(*input)){
+				size_t size = 1;
+				while (is_valid_name_char(input[size])) size += 1;
+				curr.type = Ast_NamedInfered;
+				curr.count = size;
+				curr_data.name_id = get_name_id(input, size);
+				input += size;
+				goto AddTokenWithData;
+			}
 			curr.type = Ast_Infered;
-			goto AddTokenWithData; // allocate more data for chaching 
+			goto AddToken;
 
 		case ':':{
 			input += 1;
@@ -619,6 +628,9 @@ ExpectValue:{
 		case Ast_EndScope:
 			it -= 1;
 			goto ExpectOperator;
+		
+		case Ast_Infered:
+			goto ExpectOperator;
 
 		case Ast_Unsigned:
 		case Ast_Float32:
@@ -635,6 +647,16 @@ ExpectValue:{
 		case Ast_Identifier:
 			if (opers[opers_size-1].type == Ast_OpenProcedure){ curr.type = Ast_Variable; }
 			goto SimpleLiteral;
+		
+		case Ast_NamedInfered:{
+			if (opers[opers_size-1].type != Ast_OpenProcedure)
+				RETURN_ERROR("named infered value was used in inapropriate context", curr.pos);
+			uint8_t default_and_infered_size = opers[opers_size-1].flags;
+			if (default_and_infered_size == 255) // prevent overflow 
+				RETURN_ERROR("definitely too many infered values", curr.pos);
+			opers[opers_size-1].flags = default_and_infered_size + 1;
+			goto SimpleLiteral;
+		}
 		
 		case Ast_GetField:
 			curr.type = Ast_EnumLiteral;
@@ -784,7 +806,11 @@ ExpectValue:{
 						*(res_it+1) = opers[opers_size-2];
 						res_it += 2;
 						curr.type = Ast_DefaultParam;
-						opers[opers_size-3].flags += 1;
+						uint8_t default_and_infered_size = opers[opers_size-3].flags;
+						if (default_and_infered_size == 255) // prevent overflow 
+							RETURN_ERROR("definitely too many default values", curr.pos);
+						_Static_assert(sizeof(ValueInfo)/sizeof(NamedInferInfo) == 3);
+						opers[opers_size-3].flags = default_and_infered_size + 3;
 						opers[opers_size-2] = curr;
 						opers_size -= 1;
 					} else{
@@ -910,7 +936,7 @@ ExpectValue:{
 			if (sc.count > MAX_PARAM_COUNT)
 				RETURN_ERROR("procedure has too many parameters", procnode->pos);
 			procnode->param_count = sc.count;
-			procnode->default_count = sc.flags;
+			procnode->default_and_infered_size = sc.flags;
 			AstNode open_node = { .type = Ast_StartScope, .pos = (it-1)->pos };
 			it += 2;
 			AstNode open_oper = { .type = Ast_Procedure, .pos = res_it - tokens.data };

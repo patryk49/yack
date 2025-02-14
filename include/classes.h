@@ -39,7 +39,6 @@ struct NameEntry{
 	uint32_t data_index;
 };
 
-
 struct GlobalNameSet{
 	struct NameEntry *data;
 	size_t size     : 32;
@@ -521,3 +520,7 @@ static const char *match_argument(ValueInfo *arg, Class target, bool ctime, Data
 	}
 	arg->clas = target;
 }
+
+
+
+

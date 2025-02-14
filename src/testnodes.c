@@ -108,18 +108,37 @@ int main(int argc, char **argv){
 	}
 
 	if (show_stats){
+		double read_time_s = (double)read_time * 0.000001;
+		double tok_time_s = (double)tok_time * 0.000001;
+		double parse_time_s = (double)parse_time * 0.000001;
+		double making_ast_time_s = (double)(read_time_s + tok_time_s + parse_time_s);
 		size_t token_size = tokens.end - tokens.data;
 		size_t ast_size = ast.end - ast.data;
 		size_t token_count = count_tokens(tokens);
 		size_t ast_count = count_ast(ast);
-		printf("reading time:  %lf [s]\n", (double)read_time*0.000001);
-		printf("lexing time:   %lf [s]\n", (double)tok_time*0.000001);
-		printf("parsing time:  %lf [s]\n", (double)parse_time*0.000001);
-		printf("token size:    %zu [nodes]\n", token_size);
-		printf("ast size:      %zu [nodes]\n", ast_size);
-		printf("token count:   %zu\n", token_count);
-		printf("ast count:     %zu\n", ast_count);
-		printf("ast per token: %lf\n", (double)ast_size / (double)token_size);
+		double text_size_mb = text.size * 0.000001;
+
+		printf("token count    :%10zu\n", token_count);
+		printf("ast node count :%10zu\n", ast_count);
+		printf("node/token count ratio : %8.6lf\n\n", (double)ast_count/(double)token_count);
+		
+		printf("tokens size    :%10zu\n", token_size);
+		printf("ast nodes size :%10zu\n", ast_size);
+		printf("nodes/tokens size ratio : %8.6lf\n\n", (double)ast_size/(double)token_size);
+		
+		printf("lexing speed     :%13.2lf [tokens/s]\n", (double)token_count/tok_time_s);
+		printf("parsing speed    :%13.2lf [nodes/s]\n", (double)ast_count/parse_time_s);
+		printf("making ast speed :%13.2lf [nodes/s]\n\n", (double)ast_count/making_ast_time_s);
+		
+		printf("reading time    :%10.6lf [s]\n", read_time_s);
+		printf("lexing time     :%10.6lf [s]\n", tok_time_s);
+		printf("parsing time    :%10.6lf [s]\n", parse_time_s);
+		printf("making ast time :%10.6lf [s]\n\n", making_ast_time_s);
+		
+		printf("reading speed    :%11.2lf [MB/s]\n", text_size_mb/read_time_s);
+		printf("lexing speed     :%11.2lf [MB/s]\n", text_size_mb/tok_time_s);
+		printf("parsing speed    :%11.2lf [MB/s]\n", text_size_mb/parse_time_s);
+		printf("making ast speed :%11.2lf [MB/s]\n\n", text_size_mb/making_ast_time_s);
 	}
 
 	if (show_sets){
@@ -210,8 +229,8 @@ void print_ast(AstArray ast){
 		case Ast_Terminator: return;
 		case Ast_Procedure:
 			printf(
-				": param_count = %u, default_count = %u",
-				(unsigned)node.param_count, (unsigned)node.default_count
+				": param_count = %u, default_and_infered_size = %u",
+				(unsigned)node.param_count, (unsigned)node.default_and_infered_size
 			);
 			if (node.flags){
 				printf(",  flags = ");
@@ -243,6 +262,7 @@ void print_ast(AstArray ast){
 		case Ast_Identifier:
 		case Ast_GetField:
 		case Ast_EnumLiteral:
+		case Ast_NamedInfered:
 			printf(": \"");
 			for (size_t i=0; i!=node.count; i+=1){
 				putchar(global_names.data[data.name_id+i]);

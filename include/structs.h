@@ -2,7 +2,10 @@
 #include "ast_nodes.h"
 
 // this must be less or equal to 16
-#define MAX_PARAM_COUNT 12
+#define MAX_PARAM_COUNT 10
+
+// this should be less or equal to 100 // not precisely
+#define MAX_NAMED_INFERS 21
 
 typedef uint32_t NameId;
 typedef int32_t  VarIndex;
@@ -45,11 +48,9 @@ typedef int32_t  VarIndex;
 
 
 #define PREFIX_SIZE         4u
-#define PREFIX_COUNT_MAX    6u
+#define MAX_PREFIX_COUNT    6u
 #define PREFIX_MASK         0xfu
 #define PREFIX_HAS_PTR_MASK 0x888888u
-
-#define MAX_INFERED_COUNT 16
 
 
 
@@ -68,6 +69,7 @@ enum ClassTag{
 	Class_Error, 
 	Class_Expr,
 	Class_Infered,
+	Class_Variable,
 	Class_Class,
 	Class_Bytes,
 	Class_Unsigned,
@@ -121,31 +123,30 @@ typedef union Class{
 // BASIC CLASSES
 #define BASIC_CLASS(arg_tag, arg_infered, arg_basic_size, arg_basic_alignment) (Class){ \
 	.tag             = arg_tag, \
-	.infered         = arg_infered, \
 	.basic_size      = arg_basic_size, \
 	.basic_alignment = arg_basic_alignment \
 }
 
-#define CLASS_VOID          BASIC_CLASS(Class_Void,         false, 0, 0)
-#define CLASS_ERROR         BASIC_CLASS(Class_Error,        false, 0, 0)
-#define CLASS_CLASS         BASIC_CLASS(Class_Class,        false, 8, 3)
-#define CLASS_U8            BASIC_CLASS(Class_Unsigned,     false, 1, 0)
-#define CLASS_U16           BASIC_CLASS(Class_Unsigned,     false, 2, 1)
-#define CLASS_U32           BASIC_CLASS(Class_Unsigned,     false, 4, 2)
-#define CLASS_U64           BASIC_CLASS(Class_Unsigned,     false, 8, 3)
-#define CLASS_I8            BASIC_CLASS(Class_Integer,      false, 1, 0)
-#define CLASS_I16           BASIC_CLASS(Class_Integer,      false, 2, 1)
-#define CLASS_I32           BASIC_CLASS(Class_Integer,      false, 4, 2)
-#define CLASS_I64           BASIC_CLASS(Class_Integer,      false, 8, 3)
-#define CLASS_Bool          BASIC_CLASS(Class_Bool,         false, 1, 0)
-#define CLASS_F32           BASIC_CLASS(Class_Float,        false, 4, 2)
-#define CLASS_F64           BASIC_CLASS(Class_Float,        false, 8, 3)
+#define CLASS_VOID          BASIC_CLASS(Class_Void,     0, 0)
+#define CLASS_ERROR         BASIC_CLASS(Class_Error,    0, 0)
+#define CLASS_CLASS         BASIC_CLASS(Class_Class,    8, 3)
+#define CLASS_U8            BASIC_CLASS(Class_Unsigned, 1, 0)
+#define CLASS_U16           BASIC_CLASS(Class_Unsigned, 2, 1)
+#define CLASS_U32           BASIC_CLASS(Class_Unsigned, 4, 2)
+#define CLASS_U64           BASIC_CLASS(Class_Unsigned, 8, 3)
+#define CLASS_I8            BASIC_CLASS(Class_Integer,  1, 0)
+#define CLASS_I16           BASIC_CLASS(Class_Integer,  2, 1)
+#define CLASS_I32           BASIC_CLASS(Class_Integer,  4, 2)
+#define CLASS_I64           BASIC_CLASS(Class_Integer,  8, 3)
+#define CLASS_Bool          BASIC_CLASS(Class_Bool,     1, 0)
+#define CLASS_F32           BASIC_CLASS(Class_Float,    4, 2)
+#define CLASS_F64           BASIC_CLASS(Class_Float,    8, 3)
 
-#define CLASS_IPTR BASIC_CLASS(Class_Integer,  false, PTR_SIZE, PTR_ALIGNMENT)
-#define CLASS_UPTR BASIC_CLASS(Class_Unsigned, false, PTR_SIZE, PTR_ALIGNMENT)
+#define CLASS_IPTR BASIC_CLASS(Class_Integer,  PTR_SIZE, PTR_ALIGNMENT)
+#define CLASS_UPTR BASIC_CLASS(Class_Unsigned, PTR_SIZE, PTR_ALIGNMENT)
 
-#define CLASS_ISIZE BASIC_CLASS(Class_Integer,  false, REG_SIZE, REG_ALIGNMENT)
-#define CLASS_USIZE BASIC_CLASS(Class_Unsigned, false, REG_SIZE, REG_ALIGNMENT)
+#define CLASS_ISIZE BASIC_CLASS(Class_Integer,  REG_SIZE, REG_ALIGNMENT)
+#define CLASS_USIZE BASIC_CLASS(Class_Unsigned, REG_SIZE, REG_ALIGNMENT)
 
 #define CLASS_VOID_PTR (Class){ \
 	.tag = Class_Void, \
@@ -245,17 +246,22 @@ typedef struct InstanceInfo{
 } InstanceInfo;
 
 
+typedef struct{
+	NameId  name_id;
+	uint8_t comptime_id;	
+} NamedInferInfo;
+
 // structures that containt information abount non unique classes
 typedef struct ProcedureClassInfo{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
+
 	uint8_t  param_count;
 	uint8_t  default_count;
-	bool     has_single_implementation;
+	uint8_t  comptime_count;
+	uint8_t  named_infers_count;
 
 	uint16_t comptime_flags;
-
-	uint8_t  infered_count;
 	uint16_t module_id;
 
 	// For each implementation of this procedure .istances stores:
@@ -272,10 +278,13 @@ typedef struct ProcedureClassInfo{
 	InstanceInfo *instances;
 	
 	uint32_t body_index;
-	
-	Class    arg_classes[];  // variable size field
-// NameId   arg_name_ids[]; // pretend it exists
-// uint32_t arg_defaults[];     // pretend it exists
+	uint8_t  names_offset; // offset from classes to names
+	bool     has_single_instance;
+
+	Class          arg_classes[];   // variable size field
+// NamedInferInfo infered_names[]; // pretend it exists
+// Value          arg_defaults[];  // pretend it exists // defaults can be inserted from end
+// NameId         arg_name_ids[];  // pretend it exists
 } ProcedureClassInfo;
 
 
@@ -326,7 +335,7 @@ typedef union AstNode{
 			uint16_t count;
 			struct{ // for procedure node
 				uint8_t param_count;
-				uint8_t default_count;
+				uint8_t default_and_infered_size;
 			};
 		};
 		uint32_t pos;
@@ -374,7 +383,10 @@ enum ScopeType{
 typedef struct{
 	enum ScopeType type : 8;
 	uint16_t module_id; // 0 means the current scope
-	uint16_t count;
+	union{
+		uint16_t count;
+		struct{ uint8_t a; uint8_t b; } counts;	
+	};
 	union{
 		ProcedureClassInfo *procinfo;
 	};
