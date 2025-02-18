@@ -809,8 +809,8 @@ ExpectValue:{
 						uint8_t default_and_infered_size = opers[opers_size-3].flags;
 						if (default_and_infered_size == 255) // prevent overflow 
 							RETURN_ERROR("definitely too many default values", curr.pos);
-						_Static_assert(sizeof(ValueInfo)/sizeof(NamedInferInfo) == 3);
-						opers[opers_size-3].flags = default_and_infered_size + 3;
+						_Static_assert(sizeof(ValueInfo)/sizeof(NameId) == 6);
+						opers[opers_size-3].flags = default_and_infered_size + 6;
 						opers[opers_size-2] = curr;
 						opers_size -= 1;
 					} else{

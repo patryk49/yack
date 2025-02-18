@@ -11,7 +11,6 @@ typedef uint32_t NameId;
 typedef int32_t  VarIndex;
 
 
-
 #if   UINTPTR_MAX == UINT64_MAX
 	#define PTR_SIZE      8
 	#define PTR_ALIGNMENT 3
@@ -95,9 +94,6 @@ enum ClassTag{
 	Class_Module
 };
 
-
-
-
 typedef union Class{
 	uint64_t id;
 	struct{
@@ -117,6 +113,26 @@ typedef union Class{
 		};
 	};
 } Class;
+
+
+
+typedef struct{
+	uint32_t index;
+	uint32_t size;
+} StaticBufInfo;
+
+typedef union Data{
+	uint8_t     bytes[8];
+	uint64_t    u64;
+	uint32_t    code;
+	float       f32;
+	double      f64;
+	Class       clas;
+	void       *ptr;
+	const char *text;
+	NameId      name_id;
+	StaticBufInfo bufinfo;
+} Data;
 
 
 
@@ -239,29 +255,28 @@ typedef struct StructClassInfo{
 
 
 typedef struct InstanceInfo{
-	uint64_t hash;
-	//struct IrProc *ir_proc;
-	Class arg_classes[];
-// IrNode *comptime_args[]; // pretend it exists
+	uint32_t bc_index;
+	uint16_t hash;
+	uint16_t data_size;
+	Data data[];
 } InstanceInfo;
 
-
-typedef struct{
-	NameId  name_id;
-	uint8_t comptime_id;	
-} NamedInferInfo;
 
 // structures that containt information abount non unique classes
 typedef struct ProcedureClassInfo{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
 
-	uint8_t  param_count;
-	uint8_t  default_count;
-	uint8_t  comptime_count;
-	uint8_t  named_infers_count;
+	uint8_t param_count;
+	uint8_t default_count;
+	uint8_t named_infers_count;
+	
+	uint8_t defaults_offset; // offset to defaults 
+	uint8_t comptime_count; // this is not used
 
-	uint16_t comptime_flags;
+	uint16_t comptime_flags; // marks compile time parameters
+	uint16_t infered_flags; // marks parameter types with unnamed infers
+
 	uint16_t module_id;
 
 	// For each implementation of this procedure .istances stores:
@@ -273,18 +288,16 @@ typedef struct ProcedureClassInfo{
 	// - and maybe something else
 	// infered classes
 	// IrNode's of constant arguments
+	InstanceInfo *instances;
 	uint16_t instance_count;
 	uint16_t instance_capacity;
-	InstanceInfo *instances;
 	
 	uint32_t body_index;
-	uint8_t  names_offset; // offset from classes to names
-	bool     has_single_instance;
 
-	Class          arg_classes[];   // variable size field
-// NamedInferInfo infered_names[]; // pretend it exists
-// Value          arg_defaults[];  // pretend it exists // defaults can be inserted from end
-// NameId         arg_name_ids[];  // pretend it exists
+	Class  arg_classes[];   // variable size field
+// NameId arg_name_ids[];  // pretend it exists
+// NameId infered_names[]; // pretend it exists
+// Value  arg_defaults[];  // pretend it exists // defaults can be inserted from the end
 } ProcedureClassInfo;
 
 
@@ -309,28 +322,10 @@ enum AstFlags{
 	AstFlag_ReturnSpec = 1 << 4,
 };
 
-typedef struct{
-	uint32_t index;
-	uint32_t size;
-} StaticBufInfo;
-
-typedef union Data{
-	uint8_t  bytes[8];
-	uint64_t u64;
-	uint32_t code;
-	float    f32;
-	double   f64;
-	Class    clas;
-	void    *ptr;
-	const char *text;
-	NameId name_id;
-	StaticBufInfo bufinfo;
-} Data;
-
 typedef union AstNode{
 	struct{
 		enum AstType type : 8;
-		uint8_t  flags;
+		uint8_t flags;
 		union{
 			uint16_t count;
 			struct{ // for procedure node
@@ -349,9 +344,11 @@ typedef union AstNode{
 
 // SEMENTIC ALALYSIS REALTED STRUCTS
 enum ValueFlags{
-	VF_Const  = 0,
+	VF_Const = 0,
 	VF_Big,
 	VF_Dependant,
+	VF_Lvalue,
+	VF_Uninitialized
 };
 
 
@@ -368,6 +365,10 @@ typedef struct{
 	};
 } ValueInfo;
 
+typedef struct{
+	NameId name_id;
+	uint32_t value_idx;
+} VariableInfo;
 
 enum ScopeType{
 	Scope_Global,
@@ -387,15 +388,12 @@ typedef struct{
 		uint16_t count;
 		struct{ uint8_t a; uint8_t b; } counts;	
 	};
+	uint32_t proc_idx;
+	uint32_t vars_size;
 	union{
-		ProcedureClassInfo *procinfo;
+		uint32_t openproc_idx;
 	};
 } ScopeInfo;
-
-typedef struct{
-	uint32_t name_id;
-	uint32_t bc_pos;
-} VariableInfo;
 
 
 
