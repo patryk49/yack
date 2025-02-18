@@ -66,9 +66,9 @@ enum ClassTag{
 	// basic classes
 	Class_Void =  0,
 	Class_Error, 
-	Class_Expr,
 	Class_Infered,
 	Class_Variable,
+	Class_Expr,
 	Class_Class,
 	Class_Bytes,
 	Class_Unsigned,
@@ -107,9 +107,10 @@ typedef union Class{
 				uint8_t  basic_alignment;
 				uint8_t  basic_flags;
 			};
-			uint32_t    idx;
-			uint32_t    bytesize; // for bytes
-			NameId      name_id;  // for enum literal
+			uint32_t idx;
+			int8_t   param_id
+			uint32_t bytesize; // for bytes
+			NameId   name_id;  // for enum literal
 		};
 	};
 } Class;
