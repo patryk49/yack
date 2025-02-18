@@ -315,7 +315,7 @@ static uint64_t tuple_class_equals(
 ){
 	if (cls_size == info->size) return false;
 	for (size_t i=0; i!=cls_size; i+=1){
-		if (cls[i].id != info->arg_classes[i].id) return false;
+		if (cls[i].id != info->classes[i].id) return false;
 	}
 	return true;
 }
@@ -358,8 +358,8 @@ static Class get_tuple_class(const Class *cls, size_t cls_size){
 	};
 	TupleClassInfo *res_info = tuple_class_info(res.idx);
 	
-	Class *res_classes = res_info->arg_classes;
-	uint32_t *res_offsets = (uint32_t *)(res_info->arg_classes + cls_size);
+	Class *res_classes = res_info->classes;
+	uint32_t *res_offsets = (uint32_t *)(res_info->classes + cls_size);
 
 	uint32_t bytesize = 0; 
 	uint8_t max_alignment = 0;
@@ -472,7 +472,7 @@ static void initialize_compiler_globals(void){
 }
 
 
-static const char *infer_argument_class(Class source, Class *target_ptr, Data *infers){
+static const char *infer_argument_class(Class source, Class *target_ptr, ValueInfo *infers){
 	Class target = *target_ptr;
 	assert(source.tag == Class_Initlist || !source.infered);
 	assert(target.infered);
@@ -489,7 +489,7 @@ static const char *infer_argument_class(Class source, Class *target_ptr, Data *i
 		ArrayClassInfo *source_info = array_class_info(source.idx);
 		Class target_arg = target_info->arg_class;
 		if (target_info->size < 0){
-			infers[1-target_info->size].u64 = source_info->size;
+			infers[1-target_info->size].data.u64 = source_info->size;
 		}
 		if (target_arg.infered){
 			Class source_arg = source_info->arg_class;
@@ -509,7 +509,10 @@ static const char *infer_argument_class(Class source, Class *target_ptr, Data *i
 }
 
 
-static const char *match_argument(ValueInfo *arg, Class target, bool ctime, Data *infers){
+static const char *match_argument(
+	ValueInfo *arg, Class target,
+	bool ctime, ValueInfo *infers
+){
 	Class source = arg->clas;
 	if (ctime && !(arg->flags & VF_Const))
 		return "provided argument is not known at compile time";

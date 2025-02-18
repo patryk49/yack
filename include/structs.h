@@ -5,7 +5,7 @@
 #define MAX_PARAM_COUNT 10
 
 // this should be less or equal to 100 // not precisely
-#define MAX_NAMED_INFERS 21
+#define MAX_NAMED_INFERS 14
 
 typedef uint32_t NameId;
 typedef int32_t  VarIndex;
@@ -137,7 +137,7 @@ typedef union Data{
 
 
 // BASIC CLASSES
-#define BASIC_CLASS(arg_tag, arg_infered, arg_basic_size, arg_basic_alignment) (Class){ \
+#define BASIC_CLASS(arg_tag, arg_basic_size, arg_basic_alignment) (Class){ \
 	.tag             = arg_tag, \
 	.basic_size      = arg_basic_size, \
 	.basic_alignment = arg_basic_alignment \
@@ -194,7 +194,7 @@ typedef struct TupleClassInfo{
 	uint8_t  alignment :  8;
 	uint16_t size;
 	uint16_t padding_0;
-	Class    arg_classes[];
+	Class    classes[];
 // uint32_t offsets[]; // pretend it exists
 } TupleClassInfo;
 
@@ -217,7 +217,7 @@ typedef struct ProcPointerClassInfo{
 	uint16_t       size; // this fileld exists to reuse the tuple code
 	uint8_t        arg_count;
 	enum ProcFlags flags : 8;
-	Class          arg_classes[];
+	Class          classes[];
 } ProcPointerClassInfo;
 
 
@@ -248,7 +248,7 @@ typedef struct StructClassInfo{
 
 	char     *name;
 
-	Class    arg_classes[];
+	Class    classes[];
 // uint32_t offsets[];     // pretend it exists
 // uint32_t field_names[]; // pretend it exists
 } StructClassInfo;
@@ -294,7 +294,7 @@ typedef struct ProcedureClassInfo{
 	
 	uint32_t body_index;
 
-	Class  arg_classes[];   // variable size field
+	Class  classes[];   // variable size field
 // NameId arg_name_ids[];  // pretend it exists
 // NameId infered_names[]; // pretend it exists
 // Value  arg_defaults[];  // pretend it exists // defaults can be inserted from the end
