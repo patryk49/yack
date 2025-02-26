@@ -7,6 +7,10 @@
 // this should be less or equal to 100 // not precisely
 #define MAX_NAMED_INFERS 14
 
+#define ARRAY_MAX_SIZE (1 << 24)
+#define TUPLE_MAX_SIZE 1024
+
+
 typedef uint32_t NameId;
 typedef int32_t  VarIndex;
 
@@ -47,6 +51,7 @@ typedef int32_t  VarIndex;
 
 
 #define PREFIX_SIZE         4u
+#define MAX_PREFIXES_SIZE   24u
 #define MAX_PREFIX_COUNT    6u
 #define PREFIX_MASK         0xfu
 #define PREFIX_HAS_PTR_MASK 0x888888u
@@ -108,7 +113,7 @@ typedef union Class{
 				uint8_t  basic_flags;
 			};
 			uint32_t idx;
-			int8_t   param_id
+			int8_t   param_id;
 			uint32_t bytesize; // for bytes
 			NameId   name_id;  // for enum literal
 		};
@@ -183,14 +188,29 @@ typedef union ClassInfoHeader{
 	uint64_t _union_field_that_exists_in_here_for_alignment_purpuses;
 } ClassInfoHeader;
 
-typedef struct ArrayClassInfo{
-	uint32_t bytesize  : 24;
-	uint8_t  alignment :  8;
-	int32_t  size; // negative means infered size
-	Class    arg_class;
+enum ArraySizeTag{
+	ArraySizeTag_None = 0,
+	ArraySizeTag_Infered,
+	ArraySizeTag_Variable,
+	ArraySizeTag_Expr
+};
+
+typedef union{
+	uint32_t value;
+	struct{ // used for infered variables
+		enum ArraySizeTag tag   :  2;
+		uint32_t          index : 30;
+	};
+} ArraySizeInfo;
+
+typedef struct{
+	uint32_t      bytesize  : 24;
+	uint8_t       alignment :  8;
+	ArraySizeInfo sizeinfo;
+	Class         arg_class;
 } ArrayClassInfo;
 
-typedef struct TupleClassInfo{
+typedef struct{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
 	uint16_t size;
@@ -212,7 +232,7 @@ enum ProcFlags{
 };
 
 // has the same arrangement as TupleClassInfo to reuse some code
-typedef struct ProcPointerClassInfo{
+typedef struct{
 	uint32_t       bytesize  : 24;
 	uint8_t        alignment :  8;
 	uint16_t       size; // this fileld exists to reuse the tuple code
@@ -223,7 +243,7 @@ typedef struct ProcPointerClassInfo{
 
 
 // has the same arrangement as TupleClassInfo to reuse some code
-typedef struct EnumClassInfo{
+typedef struct{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
 	uint32_t elem_count;
@@ -233,7 +253,7 @@ typedef struct EnumClassInfo{
 } EnumClassInfo;
 
 
-typedef struct StructClassInfo{
+typedef struct{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
 	uint16_t size;
@@ -255,7 +275,7 @@ typedef struct StructClassInfo{
 } StructClassInfo;
 
 
-typedef struct InstanceInfo{
+typedef struct{
 	uint32_t bc_index;
 	uint16_t hash;
 	uint16_t data_size;
@@ -264,7 +284,7 @@ typedef struct InstanceInfo{
 
 
 // structures that containt information abount non unique classes
-typedef struct ProcedureClassInfo{
+typedef struct{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
 
@@ -280,19 +300,13 @@ typedef struct ProcedureClassInfo{
 
 	uint16_t module_id;
 
-	// For each implementation of this procedure .istances stores:
-	// Value struct that contains:
-	// - return class
-	// - coresponding ir_procedure or returned value in case when it's constant
-	// - hash of ClassNode's and IrData's following the Value struct,
-	//   that is stored at .position field
-	// - and maybe something else
-	// infered classes
-	// IrNode's of constant arguments
 	InstanceInfo *instances;
 	uint16_t instance_count;
 	uint16_t instance_capacity;
 	
+	uint32_t ast_pos;
+	NameId   name_id;
+
 	uint32_t body_index;
 
 	Class  classes[];   // variable size field
@@ -374,7 +388,7 @@ typedef struct{
 enum ScopeType{
 	Scope_Global,
 	Scope_Params,
-	Scope_Proc,
+	Scope_Procedure,
 	Scope_Block,
 	Scope_If,
 	Scope_Else,
@@ -397,6 +411,29 @@ typedef struct{
 } ScopeInfo;
 
 
+
+typedef struct{
+	uint32_t ibase;
+	uint32_t idata;
+} CtPointer64;
+
+typedef struct{
+	CtPointer64 ptr;
+	uint64_t    size;
+} CtSpan64;
+
+
+
+enum DataFlags{
+	DataFlag_Pointered = 0;
+};
+
+typedef struct{
+	uint16_t ptr_bitset[1];
+	uint8_t  flags;
+	uint8_t  alignment;
+	uint32_t bytesize;
+} DataHeader;
 
 
 
@@ -473,8 +510,9 @@ typedef union{
 	void *ptr;
 	Class clas;
 	Data data;
+	DataHeader data_header;
 } BcNode;
-
+	
 
 typedef struct BcProcHeader{
 	uint32_t body_size;

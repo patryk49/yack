@@ -88,3 +88,21 @@ x := with m:=0, for e:arr if e>m { m=e }, m
 x := for e : arr { if e == value break (True) } else { False }
 
 x := {#for c : 'A'..'Z'+1 {c}}
+
+
+IMPLICIT CASTS THAT REQUIRE SOME CODE MODIFICATION:
+	unsinged          -> bigger unsigned, bigger/equal integer
+	comptime unsigned -> any unsigned, any integer
+	integer           -> bigger integer
+	comptime integer  -> any integer
+	bool              -> any unsigned, any integer
+	comptime span     -> array
+	procedure         -> proc pointer
+	empty init list   -> anything
+	init list         -> tuple, struct, union
+	enum literal      -> enum
+
+IMPLICIT CASTS THAT DONT REQUIRE CODE MODIFICATION:
+	void pointer -> any pointer
+	any pointer -> void pointer
+

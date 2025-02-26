@@ -157,7 +157,7 @@ void print_tokens(AstArray tokens){
 	for (size_t i=1; i!=tokens.end-tokens.data;){
 		AstNode node = tokens.data[i];
 		Data data = tokens.data[i+1].data;
-		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
+		printf("%7zu%9zu  %s", i, node.pos, AstTypeNames[node.type]);
 		i += TokenSizes[node.type];
 		switch (node.type){
 		case Ast_Terminator: return;
@@ -223,7 +223,7 @@ void print_ast(AstArray ast){
 		AstNode node = ast.data[i];
 		Data data = ast.data[i+1].data;
 		if (!show_nops && node.type == Ast_Nop){ i+=1; continue; }
-		printf("%5zu%5zu  %s", i, node.pos, AstTypeNames[node.type]);
+		printf("%7zu%9zu  %s", i, node.pos, AstTypeNames[node.type]);
 		i += AstNodeSizes[node.type];
 		switch (node.type){
 		case Ast_Terminator: return;

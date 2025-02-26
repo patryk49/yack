@@ -212,8 +212,8 @@ static ArrayClassInfo *array_class_info(uint32_t index){
 	return (ArrayClassInfo *)(global_classes.data + index);
 }
 
-static uint64_t array_class_hash(Class cl, size_t size){
-	return class_hash(cl) ^ (size << 3);
+static uint64_t array_class_hash(Class cl, ArraySizeInfo sizeinfo){
+	return class_hash(cl) ^ (sizeinfo.value * 9);
 }
 
 struct ArrayClassEntry{
@@ -229,12 +229,12 @@ struct ArrayClassSet{
 
 struct ArrayClassSet global_array_set;
 
-static Class get_array_class(Class cl, size_t size){
+static Class get_array_class(Class cl, ArraySizeInfo sizeinfo){
 	assert(util_is_power2_u32(global_array_set.capacity));
 
 	struct ArrayClassSet array_set = global_array_set;
 
-	uint64_t hash = array_class_hash(cl, size);
+	uint64_t hash = array_class_hash(cl, sizeinfo);
 	size_t index_mask = array_set.capacity - 1;
 	size_t index = hash & index_mask;
 	for (size_t i=0;; i+=1){
@@ -242,7 +242,9 @@ static Class get_array_class(Class cl, size_t size){
 		if (entry.clas.id == 0) break; // name not found
 		if (entry.hash == hash){
 			const ArrayClassInfo *info = array_class_info(entry.clas.idx);
-			if (size == info->size && cl.id == info->arg_class.id) return entry.clas;
+			if (sizeinfo.value == info->sizeinfo.value && cl.id == info->arg_class.id){
+				return entry.clas;
+			}
 		}
 		index = (index + i + 1) & index_mask;
 	}
@@ -250,14 +252,16 @@ static Class get_array_class(Class cl, size_t size){
 	// add new entry's data
 	Class res = {
 		.tag = Class_Array,
+		.infered = cl.infered || sizeinfo.tag != 0,
+		.pointered = cl.pointered,
 		.idx = global_classes_alloc(sizeof(ArrayClassInfo))
 	};
 	ArrayClassInfo *res_info = array_class_info(res.idx);
 	
 	*res_info = (ArrayClassInfo){
-		.bytesize = size*get_bytesize(cl),
+		.bytesize = sizeinfo.value*get_bytesize(cl),
 		.alignment = get_alignment(cl),
-		.size = size,
+		.sizeinfo = sizeinfo,
 		.arg_class = cl
 	};
 
@@ -474,54 +478,125 @@ static void initialize_compiler_globals(void){
 
 static const char *infer_argument_class(Class source, Class *target_ptr, ValueInfo *infers){
 	Class target = *target_ptr;
-	assert(source.tag == Class_Initlist || !source.infered);
+	assert(!source.infered);
 	assert(target.infered);
 
-	switch (target.tag){
-	case Class_Infered:
-		//infers[target.infro.var_index].clas = source;
-		//source = infers[target.infro.var_index].clas;
-		break;
-	case Class_Array:{
-		if (source.tag != Class_Array)
-			return "argument's class doesn\'t match the target";
-		ArrayClassInfo *target_info = array_class_info(target.idx);
-		ArrayClassInfo *source_info = array_class_info(source.idx);
-		Class target_arg = target_info->arg_class;
-		if (target_info->size < 0){
-			infers[1-target_info->size].data.u64 = source_info->size;
-		}
-		if (target_arg.infered){
-			Class source_arg = source_info->arg_class;
-			const char *err = infer_argument_class(source_arg, &target_arg, infers);
-			if (err != NULL) return err;
-			source = get_array_class(target_arg, source_info->size);
-		}
-		break;
+	size_t prefixes_size = 0; // target's prefixes must be maintained
+	for (;;){
+		uint32_t prefix = (target.prefixes >> prefixes_size) & PREFIX_MASK;
+		if (prefix == 0) break;
+		if (prefix != (source.prefixes & PREFIX_MASK))
+			return "class prefix mismatch";
+		source.prefixes >>= PREFIX_SIZE;
+		prefixes_size += PREFIX_SIZE;
 	}
 
+	case Class_Infered:
+		if (target.param_id != 0){
+			infers[target.param_id] = (VariableInfo){
+				.clas = CLASS_CLASS, .flags = VF_Const, .data.clas = source
+			};
+		}
+	RestorePrefixesReturn:
+		uint32_t prefixes = (source.prefixes << prefixes_size) | target.prefixes;
+		if ((prefixes >> MAX_PREFIXES_SIZE) != 0)
+			return "class has too many prefixes"
+		source.prefixes = prefixes;
+		*target_ptr = source;
+		return NULL;
+	}
+	case Class_Variable:{
+		if (target.param_id < 0){
+			source = infers[-(1+target.param_id)].clas;
+		} else{
+			if (infers[taget.param_id].clas.id != CLASS_CLASS.id)
+				return "infered variable is not a class";
+			source = infers[-(1+target.param_id)].data.clas;
+		}
+		goto RestorePrefixesReturn;
+	}
+	case Class_Expr:
+		assert(false && "infered variable expressions are not implemented");
+		goto RestorePrefixesReturn;
 	default: break;
 	}
 
+	if (source.prefixes != 0)
+		return "class prefix mismatch";
 	source.prefixes = target.prefixes;
+
+	switch (target.tag){
+	case Class_Array:{
+		ArrayClassInfo *target_info = array_class_info(target.idx);
+		Class target_arg = target_info->arg_class;
+		if (source.tag == Class_Array){
+			ArrayClassInfo *source_info = array_class_info(source.idx);
+			if (target_info->sizeinfo.tag != 0){
+				if (target_info->sizeinfo.tag == ArraySizeTag_Infered){
+					int8_t var_index = (int8_t)target_info->sizeinfo.index;
+					if (var_index != 0){
+						infers[var_index] = (ValueInfo){
+							.clas = CLASS_UPTR,
+							.flags = VF_Const,
+							.data.u64 = source_info->sizeinfo.value
+						};
+					}
+					target.sizeinfo = source.sizeinfo;
+				} else{
+					ValueInfo value;
+					if (target_info->sizeinfo.tag == ArraySizeTag_Variable){
+						int8_t var_index = (int8_t)target_info->sizeinfo.index;
+						if (var_index < 0)
+							return "argument's class cannot be used to specify array's size";
+						value = infers[var_index];
+					} else{ // this happens -> target_info->sizeinfo.tag == ArraySizeInfo_Expr
+						// TODO: evaluete expression and assign result to value
+						assert(false && "infered variable expressions are nt implemented");
+					}
+					// TODO: try to cast result to uptr in this place
+					if (value.data.u64 > ARRAY_MAX_SIZE)
+						return "array's size cannot be that big";
+					target.sizeinfo.value = value.data.u64;
+				}
+			}
+			if (target_arg.infered){
+				Class source_arg = source_info->arg_class;
+				const char *err = infer_argument_class(source_arg, &target_arg, infers);
+				if (err != NULL) return err;
+			}
+			if (
+				target_arg.id != source_arg.id ||
+				target.sizeinfo.value != source.sizeinfo.value
+			){
+				source = get_array_class(target_arg, target.sizeinfo);
+			}
+			goto ReturnSource;
+		}
+		return "argument's class doesn\'t match the target";
+	}
+	default: assert(false && "unimplementad case") break;
+	}
+ReturnSource:
 	*target_ptr = source;
-	return NULL;	
+	return NULL;
 }
 
 
-static const char *match_argument(
-	ValueInfo *arg, Class target,
-	bool ctime, ValueInfo *infers
-){
+static const char *match_argument(ValueInfo *arg, Class target, ValueInfo *infers){
 	Class source = arg->clas;
-	if (ctime && !(arg->flags & VF_Const))
-		return "provided argument is not known at compile time";
 	
 	if (target.infered){
 		const char *err = infer_argument_class(source, &target, infers);
 		if (err != NULL) return err;
 	}
 	arg->clas = target;
+	
+	size_t prefixes_size = 0;
+	for (;;){
+		uint32_t prefix = ()
+
+	}
+	
 }
 
 

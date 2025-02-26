@@ -506,14 +506,13 @@ static AstArray make_tokens(const char *input){
 			}
 			*dest_data = '\0';
 			input += 1;
-			*dest_node = (BcNode){ .type = BC_Data, };
-			(dest_node+1)->clas = (Class){ .tag = Class_Bytes, .bytesize = data_size };
+			*dest_node = (DataHeader){ .bytesize = data_size };
 
 			curr.type = Ast_String;
-			curr_data.bufinfo.index = global_bc_size + 2;
+			curr_data.bufinfo.index = global_bc_size + 1;
 			curr_data.bufinfo.size  = data_size;
 			
-			global_bc_size += 2 + (data_size + 2 + sizeof(BcNode) - 1)/sizeof(BcNode);
+			global_bc_size += 1 + (data_size + 2 + sizeof(BcNode) - 1)/sizeof(BcNode);
 			goto AddTokenWithData;
 		}
 
@@ -809,7 +808,7 @@ ExpectValue:{
 						uint8_t default_and_infered_size = opers[opers_size-3].flags;
 						if (default_and_infered_size == 255) // prevent overflow 
 							RETURN_ERROR("definitely too many default values", curr.pos);
-						_Static_assert(sizeof(ValueInfo)/sizeof(NameId) == 6);
+						_Static_assert(sizeof(ValueInfo)/sizeof(NameId) == 6, "");
 						opers[opers_size-3].flags = default_and_infered_size + 6;
 						opers[opers_size-2] = curr;
 						opers_size -= 1;
