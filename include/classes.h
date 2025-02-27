@@ -476,10 +476,36 @@ static void initialize_compiler_globals(void){
 }
 
 
+
+// Fills in any (except in one case) undefined values in target class using
+// source and previously defined compile time arguments. It also defines infered values
+// by placing in into infers array.
 static const char *infer_argument_class(Class source, Class *target_ptr, ValueInfo *infers){
 	Class target = *target_ptr;
 	assert(!source.infered);
 	assert(target.infered);
+
+	if (target.tag == Class_Variable || target.tag == Class_Expr){
+		if (target.tag == Class_Variable){
+			if (target.param_id < 0){
+				source = infers[-(1+target.param_id)].clas;
+			} else{
+				if (infers[taget.param_id].clas.id != CLASS_CLASS.id)
+					return "infered variable is not a class";
+				source = infers[-(1+target.param_id)].data.clas;
+			}
+		} else{
+			assert(false && "infered variable expressions are not implemented");
+		}
+		size_t prefixes_size = 0;
+		while (target.prefixes != 0){ target.prefixes >>= PREFIX_SIZE; prefixes_size += 1; }
+		uint32_t prefixes = (source.prefixes << prefixes_size) | target.prefixes;
+		if ((prefixes >> MAX_PREFIXES_SIZE) != 0)
+			return "resulting class has too many prefixes"
+		source.prefixes = prefixes;
+		*target_ptr = source;
+		return NULL;
+	}
 
 	size_t prefixes_size = 0; // target's prefixes must be maintained
 	for (;;){
@@ -491,7 +517,132 @@ static const char *infer_argument_class(Class source, Class *target_ptr, ValueIn
 		prefixes_size += PREFIX_SIZE;
 	}
 
-	case Class_Infered:
+	switch (target.tag){
+	case Class_Infered:{
+		if (target.param_id != 0){
+			infers[target.param_id] = (VariableInfo){
+				.clas = CLASS_CLASS, .flags = VF_Const, .data.clas = source
+			};
+		}
+		goto ReturnSource;
+	}
+	case Class_Array:{
+		ArrayClassInfo *target_info = array_class_info(target.idx);
+		if (
+			target_info->sizeinfo.tag == ArraySizeTag_Variable ||
+			target_info->sizeinfo.tag == ArraySizeTag_Expr
+		){
+			ValueInfo value;
+			if (target_info->sizeinfo.tag == ArraySizeTag_Variable){
+				int8_t var_index = (int8_t)target_info->sizeinfo.index;
+				if (var_index < 0)
+					return "argument's class cannot be used to specify array's size";
+				value = infers[var_index];
+			} else{ // this happens -> target_info->sizeinfo.tag == ArraySizeInfo_Expr
+				// TODO: evaluete expression and assign result to value
+				assert(false && "infered variable expressions are nt implemented");
+			}
+			// TODO: try to cast result to uptr in this place
+			if (value.data.u64 > ARRAY_MAX_SIZE)
+				return "array's size cannot be that big";
+			target.sizeinfo.value = value.data.u64;
+		}
+		Class target_arg = target_info->arg_class;
+		if ((source.prefixes & PREFIX_MASK) == ClassPrefix_Span){
+			source.prefixes >>= PREFIX_SIZE;
+			// Ignore size inference because in this case it would require an access
+			// to compile time data of span. Size can be infered by some other procedure.
+			if (target_arg.infered){
+				const char *err = infer_argument_class(source, &target_arg, infers);
+				if (err != NULL) return err;
+			}
+			if (target_arg.id == source.id){
+				source = target;
+			} else{
+				source = get_array_class(target_arg, target.sizeinfo);
+			}
+			source.infered = false; // fake it to avoid assertions in later stages
+			goto ReturnSource;
+		}
+		if (source.prefixes != 0) return "class prefix mismatch";
+		if (source.tag == Class_Array){
+			ArrayClassInfo *source_info = array_class_info(source.idx);
+			if (target_info->sizeinfo.tag == ArraySizeTag_Infered){
+				int8_t var_index = (int8_t)target_info->sizeinfo.index;
+				if (var_index != 0){
+					infers[var_index] = (ValueInfo){
+						.clas = CLASS_UPTR,
+						.flags = VF_Const,
+						.data.u64 = source_info->sizeinfo.value
+					};
+				}
+				target.sizeinfo = source.sizeinfo;
+			}
+			if (target_arg.infered){
+				Class source_arg = source_info->arg_class;
+				const char *err = infer_argument_class(source_arg, &target_arg, infers);
+				if (err != NULL) return err;
+			}
+			if (
+				target_arg.id != source_arg.id ||
+				target.sizeinfo.value != source.sizeinfo.value
+			){
+				source = get_array_class(target_arg, target.sizeinfo);
+			}
+			goto ReturnSource;
+		}
+		return "argument's class doesn\'t match the target";
+	}
+	default: assert(false && "unimplementad case") break;
+	}
+ReturnSource:
+	uint32_t prefixes = (source.prefixes << prefixes_size) | target.prefixes;
+	if ((prefixes >> MAX_PREFIXES_SIZE) != 0)
+		return "resulting class has too many prefixes"
+	source.prefixes = prefixes;
+	*target_ptr = source;
+	return NULL;
+}
+
+
+
+// Checks if classes can be trivially convereted.
+static const char *match_classes(Class source, Class target){
+	size_t prefixes_size = 0; // target's prefixes must be maintained
+
+	bool prefix_misamtch = false;
+	for (;;){
+		uint32_t prefix = (target.prefixes >> prefixes_size) & PREFIX_MASK;
+		if (prefix == 0) break;
+		if (prefix != (source.prefixes & PREFIX_MASK)){
+			if (source.prefixes & PREFIX_MASK == )
+		}
+		source.prefixes >>= PREFIX_SIZE;
+		prefixes_size += PREFIX_SIZE;
+	}
+
+	switch (target.tag){
+}
+
+
+
+static const char *match_argument(ValueInfo *arg, Class target, ValueInfo *infers){
+	Class source = arg->clas;
+	
+	size_t prefixes_size = 0; // target's prefixes must be maintained
+	bool prefix_misamtch = false;
+	for (;;){
+		uint32_t prefix = (target.prefixes >> prefixes_size) & PREFIX_MASK;
+		if (prefix == 0) break;
+		if (prefix != (source.prefixes & PREFIX_MASK)){
+			if (source.prefixes & PREFIX_MASK == )
+		}
+		source.prefixes >>= PREFIX_SIZE;
+		prefixes_size += PREFIX_SIZE;
+	}
+
+	switch (target.tag){
+	case Class_Infered:{
 		if (target.param_id != 0){
 			infers[target.param_id] = (VariableInfo){
 				.clas = CLASS_CLASS, .flags = VF_Const, .data.clas = source
@@ -520,83 +671,6 @@ static const char *infer_argument_class(Class source, Class *target_ptr, ValueIn
 		goto RestorePrefixesReturn;
 	default: break;
 	}
-
-	if (source.prefixes != 0)
-		return "class prefix mismatch";
-	source.prefixes = target.prefixes;
-
-	switch (target.tag){
-	case Class_Array:{
-		ArrayClassInfo *target_info = array_class_info(target.idx);
-		Class target_arg = target_info->arg_class;
-		if (source.tag == Class_Array){
-			ArrayClassInfo *source_info = array_class_info(source.idx);
-			if (target_info->sizeinfo.tag != 0){
-				if (target_info->sizeinfo.tag == ArraySizeTag_Infered){
-					int8_t var_index = (int8_t)target_info->sizeinfo.index;
-					if (var_index != 0){
-						infers[var_index] = (ValueInfo){
-							.clas = CLASS_UPTR,
-							.flags = VF_Const,
-							.data.u64 = source_info->sizeinfo.value
-						};
-					}
-					target.sizeinfo = source.sizeinfo;
-				} else{
-					ValueInfo value;
-					if (target_info->sizeinfo.tag == ArraySizeTag_Variable){
-						int8_t var_index = (int8_t)target_info->sizeinfo.index;
-						if (var_index < 0)
-							return "argument's class cannot be used to specify array's size";
-						value = infers[var_index];
-					} else{ // this happens -> target_info->sizeinfo.tag == ArraySizeInfo_Expr
-						// TODO: evaluete expression and assign result to value
-						assert(false && "infered variable expressions are nt implemented");
-					}
-					// TODO: try to cast result to uptr in this place
-					if (value.data.u64 > ARRAY_MAX_SIZE)
-						return "array's size cannot be that big";
-					target.sizeinfo.value = value.data.u64;
-				}
-			}
-			if (target_arg.infered){
-				Class source_arg = source_info->arg_class;
-				const char *err = infer_argument_class(source_arg, &target_arg, infers);
-				if (err != NULL) return err;
-			}
-			if (
-				target_arg.id != source_arg.id ||
-				target.sizeinfo.value != source.sizeinfo.value
-			){
-				source = get_array_class(target_arg, target.sizeinfo);
-			}
-			goto ReturnSource;
-		}
-		return "argument's class doesn\'t match the target";
-	}
-	default: assert(false && "unimplementad case") break;
-	}
-ReturnSource:
-	*target_ptr = source;
-	return NULL;
-}
-
-
-static const char *match_argument(ValueInfo *arg, Class target, ValueInfo *infers){
-	Class source = arg->clas;
-	
-	if (target.infered){
-		const char *err = infer_argument_class(source, &target, infers);
-		if (err != NULL) return err;
-	}
-	arg->clas = target;
-	
-	size_t prefixes_size = 0;
-	for (;;){
-		uint32_t prefix = ()
-
-	}
-	
 }
 
 
