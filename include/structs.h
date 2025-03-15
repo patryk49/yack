@@ -50,21 +50,22 @@ typedef int32_t  VarIndex;
 #define SPAN_SIZE (2*PTR_SIZE)
 
 
-#define PREFIX_SIZE         4u
-#define MAX_PREFIXES_SIZE   24u
-#define MAX_PREFIX_COUNT    6u
-#define PREFIX_MASK         0xfu
-#define PREFIX_HAS_PTR_MASK 0x888888u
+#define PREFIX_SIZE       4u
+#define MAX_PREFIXES_SIZE 24u
+#define MAX_PREFIX_COUNT  6u
+#define PREFIX_MASK       0xfu
+#define PREFIX_TYPE_MASK  0x7u
+#define PREFIX_CONST_MASK 0x8u
 
 
 
 // CLASSES
 enum ClassPrefix{
 	ClassPrefix_None    = 0,
-
-	// the below prefixes contain pointers
-	ClassPrefix_Pointer = 8,
-	ClassPrefix_Span    = 9,
+	ClassPrefix_Pointer = 1,
+	ClassPrefix_Span    = 2,
+	
+	ClassPrefix_Const = 8 // this is a flag 
 };
 
 enum ClassTag{
@@ -83,6 +84,7 @@ enum ClassTag{
 	
 	// compile time only
 	Class_Initlist,
+	Class_Initmap,
 	Class_EnumLiteral,
 	
 	// builtin complex classes
@@ -102,10 +104,10 @@ enum ClassTag{
 typedef union Class{
 	uint64_t id;
 	struct{
-		enum ClassTag tag       :  6;
-		bool          infered   :  1;
-		bool          pointered :  1;
-		uint32_t      prefixes  : 24;
+		enum ClassTag tag      :  6;
+		bool          infered  :  1;
+		bool          evaled   :  1;
+		uint64_t      prefixes : 24;
 		union{
 			struct{
 				uint16_t basic_size;
@@ -130,6 +132,7 @@ typedef struct{
 typedef union Data{
 	uint8_t     bytes[8];
 	uint64_t    u64;
+	int64_t     i64;
 	uint32_t    code;
 	float       f32;
 	double      f64;
@@ -143,11 +146,11 @@ typedef union Data{
 
 
 // BASIC CLASSES
-#define BASIC_CLASS(arg_tag, arg_basic_size, arg_basic_alignment) (Class){ \
+#define BASIC_CLASS(arg_tag, arg_basic_size, arg_basic_alignment) ((Class){ \
 	.tag             = arg_tag, \
 	.basic_size      = arg_basic_size, \
 	.basic_alignment = arg_basic_alignment \
-}
+})
 
 #define CLASS_VOID          BASIC_CLASS(Class_Void,     0, 0)
 #define CLASS_ERROR         BASIC_CLASS(Class_Error,    0, 0)
@@ -170,11 +173,12 @@ typedef union Data{
 #define CLASS_ISIZE BASIC_CLASS(Class_Integer,  REG_SIZE, REG_ALIGNMENT)
 #define CLASS_USIZE BASIC_CLASS(Class_Unsigned, REG_SIZE, REG_ALIGNMENT)
 
-#define CLASS_VOID_PTR (Class){ \
+#define CLASS_VOID_PTR ((Class){ \
 	.tag = Class_Void, \
-	.pointered = true, \
 	.prefixes = ClassPrefix_Pointer \
-}
+})
+
+#define CLASS_EMPTY_INITLIST ((Class){ .tag = Class_Initlist })
 
 #undef DEFINE_BASIC_CLASS
 
@@ -188,26 +192,17 @@ typedef union ClassInfoHeader{
 	uint64_t _union_field_that_exists_in_here_for_alignment_purpuses;
 } ClassInfoHeader;
 
-enum ArraySizeTag{
-	ArraySizeTag_None = 0,
-	ArraySizeTag_Infered,
-	ArraySizeTag_Variable,
-	ArraySizeTag_Expr
-};
 
-typedef union{
-	uint32_t value;
-	struct{ // used for infered variables
-		enum ArraySizeTag tag   :  2;
-		uint32_t          index : 30;
-	};
-} ArraySizeInfo;
+#define ARRAY_SIZE_TAG_MASK     0xc0000000u
+#define ARRAY_SIZE_TAG_INFERED  0x40000000u
+#define ARRAY_SIZE_TAG_VARIABLE 0x80000000u
+#define ARRAY_SIZE_TAG_EXPR     0xc0000000u
 
 typedef struct{
-	uint32_t      bytesize  : 24;
-	uint8_t       alignment :  8;
-	ArraySizeInfo sizeinfo;
-	Class         arg_class;
+	uint32_t bytesize  : 24;
+	uint8_t  alignment :  8;
+	uint32_t size;
+	Class    arg_class;
 } ArrayClassInfo;
 
 typedef struct{
@@ -242,14 +237,14 @@ typedef struct{
 } ProcPointerClassInfo;
 
 
-// has the same arrangement as TupleClassInfo to reuse some code
 typedef struct{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
-	uint32_t elem_count;
-	Class    base_class;
-	NameId names[];
-	// <- values are stored here
+	uint16_t elem_count;
+	uint16_t basic_size;
+	uint64_t max_value;
+	NameId   names[];
+// uint??_t values[]; <- pretend it exists
 } EnumClassInfo;
 
 

@@ -72,10 +72,10 @@ INFIX OPERATORS
 	*    BitAnd
 	^    BitXor
 	<<   ShiftLeft
-	<<@  ExpandedShiftLeft
+	<<|  FullShiftLeft 
 	<<%  RotateLeft
 	>>   ShiftRight
-	>>@  ExpandedShiftRight
+	>>|  FullShiftRight
 	>>%  RotateRight
 
 	~    Cast
@@ -92,17 +92,22 @@ x := {#for c : 'A'..'Z'+1 {c}}
 
 IMPLICIT CASTS THAT REQUIRE SOME CODE MODIFICATION:
 	unsinged          -> bigger unsigned, bigger/equal integer
+	zero unsigned     -> enum
 	comptime unsigned -> any unsigned, any integer
 	integer           -> bigger integer
-	comptime integer  -> any integer
+	comptime integer  -> any integer, any unsigned
 	bool              -> any unsigned, any integer
+	comptime float    -> other float
 	comptime span     -> array
+	enum              -> unsigned or integer that can represent its values
 	procedure         -> proc pointer
+	procedure         -> fat proc pointer
+	fat procedure     -> fat proc pointer
 	empty init list   -> anything
-	init list         -> tuple, struct, union
+	init list         -> array, tuple, struct, union
 	enum literal      -> enum
 
 IMPLICIT CASTS THAT DONT REQUIRE CODE MODIFICATION:
 	void pointer -> any pointer
-	any pointer -> void pointer
+	any pointer  -> void pointer
 
