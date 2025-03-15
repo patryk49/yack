@@ -4,6 +4,8 @@
 #include "structs.h"
 
 
+_Static_assert(sizeof(Class) == sizeof(BcNode));
+
 
 #define ARRAY_SIZE_MAX (UINT32_MAX - 1)
 #define TUPLE_SIZE_MAX (400)
@@ -163,16 +165,6 @@ static Class class_remove_prefix(Class cl){
 
 
 
-static StructClassInfo *struct_class_info(uint32_t index){
-	return (StructClassInfo *)(global_classes.data + index);
-}
-
-static EnumClassInfo *enum_class_info(uint32_t index){
-	return (EnumClassInfo *)(global_classes.data + index);
-}
-
-
-
 
 
 // CLASS INFO DATA
@@ -211,6 +203,16 @@ static uint8_t get_alignment(Class cl){
 
 
 
+static StructClassInfo *struct_class_info(uint32_t index){
+	return (StructClassInfo *)(global_classes.data + index);
+}
+
+static EnumClassInfo *enum_class_info(uint32_t index){
+	return (EnumClassInfo *)(global_classes.data + index);
+}
+
+
+
 
 
 // ARRAY HASH TABLE
@@ -218,8 +220,8 @@ static ArrayClassInfo *array_class_info(uint32_t index){
 	return (ArrayClassInfo *)(global_classes.data + index);
 }
 
-static uint64_t array_class_hash(Class cl, ArraySizeInfo sizeinfo){
-	return class_hash(cl) ^ (sizeinfo.value * 9);
+static uint64_t array_class_hash(Class cl, uint32_t size){
+	return class_hash(cl) ^ (size * 9);
 }
 
 struct ArrayClassEntry{
@@ -259,7 +261,7 @@ static Class get_array_class(Class cl, uint32_t size){
 	uint32_t stag = size & ARRAY_SIZE_TAG_MASK;
 	Class res = {
 		.tag = Class_Array,
-		.infered = cl.infered || size_tag==ARRAY_SIZE_TAG_INFERED,
+		.infered = cl.infered || stag==ARRAY_SIZE_TAG_INFERED,
 		.evaled  = cl.evaled || stag==ARRAY_SIZE_TAG_VARIABLE || stag==ARRAY_SIZE_TAG_EXPR,
 		.idx = global_classes_alloc(sizeof(ArrayClassInfo))
 	};
@@ -270,8 +272,8 @@ static Class get_array_class(Class cl, uint32_t size){
 		.arg_class = cl
 	};
 	if (!res.infered && !res.evaled){
-		res_info->bytesize  = size.value * get_bytesize(cl),
-		res_info->alignment = get_alignment(cl),
+		res_info->bytesize  = size * get_bytesize(cl);
+		res_info->alignment = get_alignment(cl);
 	}
 
 	// add new entry to set
@@ -486,190 +488,131 @@ static void initialize_compiler_globals(void){
 
 
 
-// Fills in any (except in one case) undefined values in target class using
-// source and previously defined compile time arguments. It also defines infered values
-// by placing in into infers array.
-static const char *infer_argument_class(Class source, Class *target_ptr, ValueInfo *infers){
+
+
+static const char *match_classes(
+	Class source, Class *restrict target_ptr, ValueInfo *restrict infers
+){
 	Class target = *target_ptr;
-	assert(!source.infered);
-	assert(target.infered);
+	assert(!target.evaled);
+	
+	if (source.id == target.id) return NULL;
 
-	if (target.tag == Class_Variable || target.tag == Class_Expr){
-		if (target.tag == Class_Variable){
-			if (target.param_id < 0){
-				source = infers[-(1+target.param_id)].clas;
-			} else{
-				if (infers[taget.param_id].clas.id != CLASS_CLASS.id)
-					return "infered variable is not a class";
-				source = infers[-(1+target.param_id)].data.clas;
-			}
-		} else{
-			assert(false && "infered variable expressions are not implemented");
-		}
-		size_t prefixes_size = 0;
-		while (target.prefixes != 0){ target.prefixes >>= PREFIX_SIZE; prefixes_size += 1; }
-		uint32_t prefixes = (source.prefixes << prefixes_size) | target.prefixes;
-		if ((prefixes >> MAX_PREFIXES_SIZE) != 0)
-			return "resulting class has too many prefixes"
-		source.prefixes = prefixes;
-		*target_ptr = source;
-		return NULL;
-	}
-
-	size_t prefixes_size = 0; // target's prefixes must be maintained
+	size_t prefixes_size = 0;
 	for (;;){
-		uint32_t prefix = (target.prefixes >> prefixes_size) & PREFIX_MASK;
-		if (prefix == 0) break;
-		if (prefix != (source.prefixes & PREFIX_MASK))
+		uint32_t target_prefix = target.prefixes >> prefixes_size;
+		if (target_prefix == 0) break;
+		if ((source.prefixes ^ target_prefix) & PREFIX_TYPE_MASK)
 			return "class prefix mismatch";
+		if ((source.prefixes & ~target_prefix) & PREFIX_CONST_MASK)
+			return "cannot pass const to a non const argument";
 		source.prefixes >>= PREFIX_SIZE;
 		prefixes_size += PREFIX_SIZE;
+		uint64_t source_prefix_type = source.prefixes & PREFIX_TYPE_MASK;
+		if (source.tag == Class_Void && source_prefix_type == ClassPrefix_Pointer){
+			if (target.infered){
+				if ((target.prefixes >> prefixes_size) != 0 || target.tag != Class_Infered)
+					return "cannot infer argument from void pointer";
+				break; // otherwise infer pointer to Void
+			}
+			return NULL;
+		}
 	}
 
 	switch (target.tag){
 	case Class_Infered:{
+		if (source.tag == Class_Initlist || source.tag == Class_EnumLiteral)
+			return "class cannot be infered from initlist or enum literal";
 		if (target.param_id != 0){
-			infers[target.param_id] = (VariableInfo){
+			infers[target.param_id] = (ValueInfo){
 				.clas = CLASS_CLASS, .flags = VF_Const, .data.clas = source
 			};
 		}
-		goto ReturnSource;
+		source.prefixes = (source.prefixes << prefixes_size) | target.prefixes;
+		*target_ptr = source;
+		return NULL;
+	}
+	case Class_Void:{
+		uint32_t last_prefix = target.prefixes >> (prefixes_size - PREFIX_SIZE);
+		if ((last_prefix & PREFIX_TYPE_MASK) == ClassPrefix_Pointer) return NULL;
+		break;
 	}
 	case Class_Array:{
-		ArrayClassInfo *target_info = array_class_info(target.idx);
-		if (
-			target_info->sizeinfo.tag == ArraySizeTag_Variable ||
-			target_info->sizeinfo.tag == ArraySizeTag_Expr
-		){
-			ValueInfo value;
-			if (target_info->sizeinfo.tag == ArraySizeTag_Variable){
-				int8_t var_index = (int8_t)target_info->sizeinfo.index;
-				if (var_index < 0)
-					return "argument's class cannot be used to specify array's size";
-				value = infers[var_index];
-			} else{ // this happens -> target_info->sizeinfo.tag == ArraySizeInfo_Expr
-				// TODO: evaluete expression and assign result to value
-				assert(false && "infered variable expressions are nt implemented");
-			}
-			// TODO: try to cast result to uptr in this place
-			if (value.data.u64 > ARRAY_MAX_SIZE)
-				return "array's size cannot be that big";
-			target.sizeinfo.value = value.data.u64;
-		}
-		Class target_arg = target_info->arg_class;
-		if ((source.prefixes & PREFIX_MASK) == ClassPrefix_Span){
-			source.prefixes >>= PREFIX_SIZE;
-			// Ignore size inference because in this case it would require an access
-			// to compile time data of span. Size can be infered by some other procedure.
-			if (target_arg.infered){
-				const char *err = infer_argument_class(source, &target_arg, infers);
-				if (err != NULL) return err;
-			}
-			if (target_arg.id == source.id){
-				source = target;
-			} else{
-				source = get_array_class(target_arg, target.sizeinfo);
-			}
-			source.infered = false; // fake it to avoid assertions in later stages
-			goto ReturnSource;
-		}
-		if (source.prefixes != 0) return "class prefix mismatch";
-		if (source.tag == Class_Array){
-			ArrayClassInfo *source_info = array_class_info(source.idx);
-			if (target_info->sizeinfo.tag == ArraySizeTag_Infered){
-				int8_t var_index = (int8_t)target_info->sizeinfo.index;
-				if (var_index != 0){
-					infers[var_index] = (ValueInfo){
-						.clas = CLASS_UPTR,
-						.flags = VF_Const,
-						.data.u64 = source_info->sizeinfo.value
-					};
-				}
-				target.sizeinfo = source.sizeinfo;
-			}
-			if (target_arg.infered){
-				Class source_arg = source_info->arg_class;
-				const char *err = infer_argument_class(source_arg, &target_arg, infers);
-				if (err != NULL) return err;
-			}
-			if (
-				target_arg.id != source_arg.id ||
-				target.sizeinfo.value != source.sizeinfo.value
-			){
-				source = get_array_class(target_arg, target.sizeinfo);
-			}
-			goto ReturnSource;
-		}
-		return "argument's class doesn\'t match the target";
-	}
-	default: assert(false && "unimplementad case") break;
-	}
-ReturnSource:
-	uint32_t prefixes = (source.prefixes << prefixes_size) | target.prefixes;
-	if ((prefixes >> MAX_PREFIXES_SIZE) != 0)
-		return "resulting class has too many prefixes"
-	source.prefixes = prefixes;
-	*target_ptr = source;
-	return NULL;
-}
-
-
-
-// Checks if classes can be trivially convereted.
-static bool match_classes(Class source, Class target){
-	size_t prefixes_size = 0; // target's prefixes must be maintained
-
-	if (source.id == target.id) return true;
-
-	for (;;){
-		uint32_t source_prefix = source.prefixes & PREFIX_MASK;
-		uint32_t target_prefix = target.prefixes & PREFIX_MASK;
-		if (target_prefix == 0) break;
-		if (source_prefix != target_prefix) return false;
-		source.prefixes >>= PREFIX_SIZE;
-		target.prefixes >>= PREFIX_SIZE;
-		if (target_prefix == ClassPrefix_Pointer){
-			if (source.prefixes == 0 && source.tag = Class_Void) return true;
-			if (target.prefixes == 0 && target.tag = Class_Void) return true;
-		}
-	}
-	
-	if (source.id == target.id) return true;
-	if (source.tag != target.tag) return false;
-
-	switch (target.tag){
-	case Class_Array:{
-		const ArrayClassInfo *source_info = array_class_info(source.idx);
+		if (source.tag != Class_Array) break;
+		if (source.prefixes != 0)
+			return "class prefix mismatch";
 		const ArrayClassInfo *target_info = array_class_info(target.idx);
-		return match_classes(source_info->arg_class, target_info->arg_class);
+		const ArrayClassInfo *source_info = array_class_info(target.idx);
+	
+		uint32_t target_size = target_info->size;
+		Class target_arg = target_info->arg_class;
+		const char *err = match_classes(source_info->arg_class, &target_arg, infers);	
+		if (err != NULL) return err;
+		if (target_size & ARRAY_SIZE_TAG_INFERED){
+			target_size = source_info->size;
+		} else if (target_size != source_info->size)
+			return "array size mismatch";
+		if (target_size != source_info->size || target_arg.id != source_info->arg_class.id){
+			source = get_array_class(target_arg, target_size);
+		}
+		source.prefixes = target.prefixes;
+		*target_ptr = source;
+		return NULL;
 	}
 	case Class_Tuple:{
-		const ArrayClassInfo *source_info = array_class_info(source.idx);
-		const ArrayClassInfo *target_info = array_class_info(target.idx);
-		if (source_info->size != target_info->size) return false;
-		for (size_t i=0; i!=target_info->size; i+=1){
-			if (!match_classes(source_info->classes[i], target_info->classes[i]))
-				return false;
+		if (source.tag != Class_Tuple) break;
+		if (source.prefixes != 0)
+			return "class prefix mismatch";
+		const TupleClassInfo *target_info = tuple_class_info(target.idx);
+		const TupleClassInfo *source_info = tuple_class_info(target.idx);
+		uint32_t size = target_info->size;
+		if (size == UINT32_MAX) goto ReturnTuple;
+		Class *args = NULL;
+		size_t saved_bc_size = global_bc_size;
+		for (size_t i=0; i!=size; i+=1){
+			Class arg = target_info->classes[i];
+			const char *err = match_classes(source_info->classes[i], &arg, infers);	
+			if (err != NULL){
+				if (args != NULL){ global_bc_size = saved_bc_size; }
+				return err;	
+			}
+			if (arg.id != source_info->classes[i].id){
+				if (args == NULL){
+					Class *args = (Class *)(global_bc + saved_bc_size);
+					global_bc_size = saved_bc_size + size;
+					memcpy(args, source_info->classes, size*sizeof(Class));
+				}
+				args[i] = arg;
+			}
 		}
-		return true;
+		if (args != NULL){
+			source = get_tuple_class(args, size);
+			global_bc_size = saved_bc_size;
+		}
+	ReturnTuple:
+		source.prefixes = target.prefixes;
+		*target_ptr = source;
+		return NULL;
 	}
 	default: break;
 	}
-	return false; 
+
+	return "class mismatch";
 }
+
 
 
 static const char *eval_class(Class *restrict target_ptr, ValueInfo *restrict infers){
 	Class target = *target_ptr;
 	assert(target.evaled);
 	
-	uint64_t prefixes = target.prefixese;
+	uint64_t prefixes = target.prefixes;
 	switch (target.tag){
 	case Class_Variable:{
 		if (target.param_id < 0){
 			target = infers[-(1+target.param_id)].clas;
 		} else{
-			if (infers[taget.param_id].clas.id != CLASS_CLASS.id)
+			if (infers[target.param_id].clas.id != CLASS_CLASS.id)
 				return "infered variable is not a class";
 			target = infers[target.param_id].data.clas;
 		}
@@ -714,14 +657,14 @@ static const char *eval_class(Class *restrict target_ptr, ValueInfo *restrict in
 			const char *err = eval_class(&arg_class, infers);
 			if (err != NULL) return err;
 		}
-		target = get_arrray_class(arg_class, size_value);	
+		target = get_array_class(arg_class, size_value);	
 		goto Return;
 	}
 	case Class_Tuple:{
-		const ArrayClassInfo *info = tuple_class_info(target.idx);
+		const TupleClassInfo *info = tuple_class_info(target.idx);
 		size_t saved_bc_size = global_bc_size;
-		Class *arg_classes = global_bc + saved_bc_size;
-		global_bc_size = saved_bc_size + (sizeof(BcNode)+sizeof(Class)-1)/sizeof(Class);
+		Class *arg_classes = (Class *)(global_bc + saved_bc_size);
+		global_bc_size = saved_bc_size + info->size;
 		memcpy(arg_classes, info->classes, info->size*sizeof(Class));
 		for (size_t i=0; i!=info->size; i+=1){
 			const char *err = eval_class(arg_classes+i, infers);
@@ -737,7 +680,7 @@ static const char *eval_class(Class *restrict target_ptr, ValueInfo *restrict in
 	RestorePrefixes:{
 		size_t prefixes_size = 0;
 		while ((prefixes >> prefixes_size) != 0){ prefixes_size += PREFIX_SIZE; }
-		prefixes |= (uint64_t)infered_class.prefixes << prefixes_size;
+		prefixes |= (uint64_t)target.prefixes << prefixes_size;
 		if (prefixes & ((1u << MAX_PREFIXES_SIZE)-1u))
 			return "substituted class has too many prefixes";
 	}
@@ -778,7 +721,7 @@ static const char *match_argument(
 	for (;;){
 		uint32_t target_prefix = target.prefixes >> prefixes_size;
 		if (target_prefix == 0) break;
-		if ((source.prefixes ^ target_prefix_type) & PREFIX_TYPE_MASK)
+		if ((source.prefixes ^ target_prefix) & PREFIX_TYPE_MASK)
 			return "class prefix mismatch";
 		if ((source.prefixes & ~target_prefix) & PREFIX_CONST_MASK)
 			return "cannot pass const to a non const argument";
@@ -787,9 +730,9 @@ static const char *match_argument(
 		uint64_t source_prefix_type = source.prefixes & PREFIX_TYPE_MASK;
 		if (source.tag == Class_Void && source_prefix_type == ClassPrefix_Pointer){
 			if (target.infered){
-				if (target.prefixes != 0)
+				if ((target.prefixes >> prefixes_size) != 0 || target.tag != Class_Infered)
 					return "cannot infer argument from void pointer";
-				break;
+				break; // otherwise infer pointer to Void
 			}
 			return NULL;
 		}
@@ -802,7 +745,7 @@ static const char *match_argument(
 		if (source.tag == Class_Initlist || source.tag == Class_EnumLiteral)
 			return "class cannot be infered from initlist or enum literal";
 		if (target.param_id != 0){
-			infers[target.param_id] = (VariableInfo){
+			infers[target.param_id] = (ValueInfo){
 				.clas = CLASS_CLASS, .flags = VF_Const, .data.clas = source
 			};
 		}
@@ -918,15 +861,15 @@ static const char *match_argument(
 	case Class_Enum:{
 		if (source.prefixes != 0)
 			return "class prefix mismatch";
-		if (target.type != Class_EnumLiteral) break;
+		if (target.tag != Class_EnumLiteral) break;
 		const EnumClassInfo *target_info = enum_class_info(target.idx);
 		size_t elem_count = target_info->elem_count;
 		size_t bytesize = target_info->basic_size;
-		assert(bytesize <= 8)
+		assert(bytesize <= 8);
 		for (size_t i=0; i!=elem_count; i+=1){
 			if (target_info->names[i] == source.name_id){
 				arg->data.u64 = 0;
-				const uint8_t *values = target_info->names + elem_count;
+				const uint8_t *values = (const uint8_t *)(target_info->names + elem_count);
 				memcpy(&arg->data.u64, values + i*bytesize, bytesize);
 				return NULL;
 			}
@@ -937,7 +880,7 @@ static const char *match_argument(
 		const ArrayClassInfo *target_info = array_class_info(target.idx);
 		size_t size;
 		if (source.prefixes != 0){
-			if (!is_class_span(source) || (source.prefixes >> PREFIX_SIZE) != 0)
+			if (!class_is_span(source) || (source.prefixes >> PREFIX_SIZE) != 0)
 				return "class prefix mismatch";
 			if (!(arg->flags & VF_Const))
 				return "non compile time span cannot be assigned to array";

@@ -208,8 +208,7 @@ typedef struct{
 typedef struct{
 	uint32_t bytesize  : 24;
 	uint8_t  alignment :  8;
-	uint16_t size;
-	uint16_t padding_0;
+	uint32_t size;
 	Class    classes[];
 // uint32_t offsets[]; // pretend it exists
 } TupleClassInfo;
@@ -420,7 +419,7 @@ typedef struct{
 
 
 enum DataFlags{
-	DataFlag_Pointered = 0;
+	DataFlag_Pointered = 0
 };
 
 typedef struct{

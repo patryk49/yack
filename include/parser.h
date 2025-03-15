@@ -7,6 +7,8 @@
 
 #include "classes.h"
 
+_Static_assert(sizeof(DataHeader) == sizeof(BcNode));
+
 
 static bool is_valid_name_char(char);
 static bool is_valid_first_name_char(char);
@@ -492,8 +494,8 @@ static AstArray make_tokens(const char *input){
 		case '\"':{
 			input += 1;
 			size_t data_size = 0;
-			BcNode *dest_node = global_bc + global_bc_size;
-			uint8_t *dest_data = (uint8_t *)(dest_node + 2);
+			DataHeader *dest_node = (DataHeader *)(global_bc + global_bc_size);
+			uint8_t *dest_data = (uint8_t *)(dest_node + 1);
 			while (*input != '\"'){
 				if (*input == '\0')
 					RETURN_ERROR("end of file inside of string literal", input-text_begin);
