@@ -753,11 +753,13 @@ static const char *match_argument(
 		arg->clas = source;
 		return NULL;
 	}
+
 	case Class_Void:{
 		uint32_t last_prefix = target.prefixes >> (prefixes_size - PREFIX_SIZE);
 		if ((last_prefix & PREFIX_TYPE_MASK) == ClassPrefix_Pointer) return NULL;
 		break;
 	}
+
 	case Class_Unsigned:{
 		if (source.prefixes != 0)
 			return "class prefix mismatch";
@@ -803,6 +805,7 @@ static const char *match_argument(
 		}
 		break;
 	}
+
 	case Class_Integer:{
 		if (source.prefixes != 0)
 			return "class prefix mismatch";
@@ -858,6 +861,7 @@ static const char *match_argument(
 		}
 		break;
 	}
+
 	case Class_Enum:{
 		if (source.prefixes != 0)
 			return "class prefix mismatch";
@@ -876,31 +880,88 @@ static const char *match_argument(
 		}
 		return "enum literal cannot represent any of targeted enum's values";
 	}
+
 	case Class_Array:{
 		const ArrayClassInfo *target_info = array_class_info(target.idx);
-		size_t size;
+		uint32_t target_size;
+		Class target_arg = target_info->arg_class;
+		Class source_arg;
+		uint32_t source_size;
 		if (source.prefixes != 0){
-			if (!class_is_span(source) || (source.prefixes >> PREFIX_SIZE) != 0)
-				return "class prefix mismatch";
+			if (!class_is_span(source)) return "class prefix mismatch";
+			source.prefixes >>= PREFIX_SIZE;
 			if (!(arg->flags & VF_Const))
 				return "non compile time span cannot be assigned to array";
-			break;	
+			source_arg = source;
+			CtSpan64 span_data;
+			memcpy(&span_data, global_bc + arg->data_idx, sizeof(CtSpan64));
+			source_size = span_data.size;
+			if (source_size > ARRAY_MAX_SIZE)
+				return "span's size is too bit to be represented by array class";
+			// comptime data case: just refer to data indexed by span
+			// runtime data case: comptime would refer to static data, so insert
+			//   load static variable node
 		}
-		Class target_arg = target_info->arg_class;
-		switch (source.tag){
-		case Class_Array:{
+		if (source.tag == Class_Array){
 			const ArrayClassInfo *source_info = array_class_info(target.idx);
-
+			source_arg  = source_info->arg_class;
+			source_size = source_info->size;
+		}
+		if (source.tag == Class_Initlist){
+			
 			break;
 		}
-		case Class_Initlist:{
-
-			break;
+		const char *err = match_classes(source_arg, &target_arg, infers);	
+		if (err != NULL) return err;
+		if (target_size & ARRAY_SIZE_TAG_INFERED){
+			target_size = source_size;
+		} else if (target_size != source_size){
+			return "array size mismatch";
 		}
-		default: break;
+		if (source.tag != Class_Array || target_arg.id != source_arg.id){
+			source = get_array_class(target_arg, target_size);
 		}
-		break;
+		source.prefixes = target.prefixes;
+		arg->clas = source;
+		return NULL;
 	}
+
+	case Class_Tuple:{
+		if (source.tag != Class_Tuple) break;
+		if (source.prefixes != 0)
+			return "class prefix mismatch";
+		const TupleClassInfo *target_info = tuple_class_info(target.idx);
+		const TupleClassInfo *source_info = tuple_class_info(target.idx);
+		uint32_t size = target_info->size;
+		if (size == UINT32_MAX) goto ReturnTuple;
+		Class *args = NULL;
+		size_t saved_bc_size = global_bc_size;
+		for (size_t i=0; i!=size; i+=1){
+			Class arg = target_info->classes[i];
+			const char *err = match_classes(source_info->classes[i], &arg, infers);	
+			if (err != NULL){
+				if (args != NULL){ global_bc_size = saved_bc_size; }
+				return err;	
+			}
+			if (arg.id != source_info->classes[i].id){
+				if (args == NULL){
+					Class *args = (Class *)(global_bc + saved_bc_size);
+					global_bc_size = saved_bc_size + size;
+					memcpy(args, source_info->classes, size*sizeof(Class));
+				}
+				args[i] = arg;
+			}
+		}
+		if (args != NULL){
+			source = get_tuple_class(args, size);
+			global_bc_size = saved_bc_size;
+		}
+	ReturnTuple:
+		source.prefixes = target.prefixes;
+		//*target_ptr = source;
+		return NULL;
+	}
+
 	default: break;
 	}
 

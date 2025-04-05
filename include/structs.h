@@ -57,6 +57,9 @@ typedef int32_t  VarIndex;
 #define PREFIX_TYPE_MASK  0x7u
 #define PREFIX_CONST_MASK 0x8u
 
+#define INITLIST_SIZE_OFFSET  8u
+#define INITLIST_FLAGS_OFFSET 4u
+
 
 
 // CLASSES
@@ -139,7 +142,10 @@ typedef union Data{
 	Class       clas;
 	void       *ptr;
 	const char *text;
-	NameId      name_id;
+	struct{
+		NameId name_id;
+		uint32_t name_helper;
+	};
 	StaticBufInfo bufinfo;
 } Data;
 
@@ -316,7 +322,8 @@ typedef struct{
 
 // PARSE TREE
 enum AstFlags{
-	AstFlag_Final = 1 << 0,
+	AstFlag_Global = 1 << 1,
+	AstFlag_Final  = 1 << 1,
 
 // operator flags
 	AstFlag_Negate = 1 << 3,
@@ -419,7 +426,8 @@ typedef struct{
 
 
 enum DataFlags{
-	DataFlag_Pointered = 0
+	DataFlag_Pointered = 1 << 0,
+	DataFlag_Mutable   = 1 << 1,
 };
 
 typedef struct{

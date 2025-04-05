@@ -105,7 +105,8 @@
 	X(Pipe,         50, 50, 1, 1), \
 \
 /* OTHER EXPRESSINS */ \
-	X(Variable,       11, 36, 2, 2), \
+	X(Variable,       11,  36, 2, 2), \
+	X(GlobalReturn , 255,  36, 0, 1), \
 \
 /* SEPARATORS */ \
 	X(Semicolon,     10, 0, 1, 1), \

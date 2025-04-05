@@ -274,10 +274,18 @@ void print_ast(AstArray ast){
 			for (size_t i=0; i!=node.count; i+=1){
 				putchar(global_names.data[data.name_id+i]);
 			}
-			printf("\" ");
-			if (node.flags & AstFlag_ClassSpec  ){ printf("ClassSpec ");   }
-			if (node.flags & AstFlag_Initialized){ printf("Initialized "); }
-			if (node.flags & AstFlag_Constant   ){ printf("Constant");     }
+			printf("\"");
+			if (node.flags & AstFlag_Global     ){ printf(" Global");   }
+			if (node.flags & AstFlag_ClassSpec  ){ printf(" ClassSpec");   }
+			if (node.flags & AstFlag_Initialized){ printf(" Initialized"); }
+			if (node.flags & AstFlag_Constant   ){ printf(" Constant");     }
+			if (
+				(node.flags & AstFlag_Global) &&
+				(node.flags & AstFlag_ClassSpec) &&
+				(node.flags & AstFlag_Initialized)
+			){
+				printf(", next = %u", (unsigned)data.name_helper);
+			}
 			break;
 		case Ast_Character:{
 			char repr[8] = {0};

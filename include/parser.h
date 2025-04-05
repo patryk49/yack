@@ -601,7 +601,8 @@ ReturnError:
 static AstArray parse_tokens(AstArray tokens){
 	AstNode opers[512];
 	size_t opers_size = 1;
-	
+
+	// set all flags to true to mark outer global scope
 	opers[0] = (AstNode){ .type = Ast_StartScope, .flags = 0xff };
 
 	AstNode *it = tokens.data + 1;
@@ -698,8 +699,9 @@ ExpectValue:{
 			enum AstType t = opers[opers_size-1].type;
 			if (t!=Ast_OpenProcedure && t!=Ast_With && t!=Ast_StartScope)
 				RETURN_ERROR("variable cannot be defined in this context", curr.pos);
+			curr.flags |= (opers[opers_size-1].flags & AstFlag_Global);
 			CHECK_OPER_STACK_OVERFLOW(curr.pos);
-			memcpy(opers+opers_size, it, sizeof(Data));
+			opers[opers_size] = *it;
 			opers_size += 1;
 			it += 1;
 			goto SimplePrefixOperator;
@@ -788,6 +790,9 @@ ExpectValue:{
 			}
 			*res_it = head;
 			res_it += 1;
+			if (head.type == Ast_GlobalReturn){
+				tokens.data[head.pos].data.name_helper = res_it - tokens.data;
+			}
 			if (head.type == Ast_Variable){
 				opers_size -= 1;
 				*res_it = opers[opers_size];
@@ -795,32 +800,45 @@ ExpectValue:{
 			}
 		}
 
-		if (Ast_Assign <= curr.type && curr.type <= Ast_Reinterpret){
-			if (curr.type == Ast_Assign){
-				AstNode varnode = opers[opers_size-1];
-				if (
-					varnode.type == Ast_Variable &&
-					(varnode.flags & (AstFlag_ClassSpec|AstFlag_Constant))
-				){
-					if (opers[opers_size-3].type == Ast_OpenProcedure){
-						*(res_it+0) = varnode;
-						*(res_it+1) = opers[opers_size-2];
+		if (curr.type == Ast_Assign){
+			AstNode varnode = opers[opers_size-1];
+			if (
+				varnode.type == Ast_Variable &&
+				(varnode.flags & (AstFlag_ClassSpec|AstFlag_Constant))
+			){
+				if (opers[opers_size-3].type == Ast_OpenProcedure){
+					*(res_it+0) = varnode;
+					*(res_it+1) = opers[opers_size-2];
+					res_it += 2;
+					curr.type = Ast_DefaultParam;
+					uint8_t default_and_infered_size = opers[opers_size-3].flags;
+					if (default_and_infered_size == 255) // prevent overflow 
+						RETURN_ERROR("definitely too many default values", curr.pos);
+					_Static_assert(sizeof(ValueInfo)/sizeof(NameId) == 6, "");
+					opers[opers_size-3].flags = default_and_infered_size + 6;
+					opers[opers_size-2] = curr;
+					opers_size -= 1;
+				} else{
+					varnode.flags |= (AstFlag_ClassSpec|AstFlag_Initialized);
+					if (varnode.flags & AstFlag_Global){
+						AstNode ret_node = {
+							.type = Ast_GlobalReturn,
+							.pos = res_it - tokens.data + 1
+						};
+						*(res_it + 0) = varnode;
+						*(res_it + 1) = opers[opers_size-2];
 						res_it += 2;
-						curr.type = Ast_DefaultParam;
-						uint8_t default_and_infered_size = opers[opers_size-3].flags;
-						if (default_and_infered_size == 255) // prevent overflow 
-							RETURN_ERROR("definitely too many default values", curr.pos);
-						_Static_assert(sizeof(ValueInfo)/sizeof(NameId) == 6, "");
-						opers[opers_size-3].flags = default_and_infered_size + 6;
-						opers[opers_size-2] = curr;
 						opers_size -= 1;
+						opers[opers_size-1] = ret_node;
 					} else{
-						varnode.flags |= (AstFlag_ClassSpec|AstFlag_Initialized);
 						opers[opers_size-1] = varnode;
 					}
-					goto ExpectValue;
 				}
+				goto ExpectValue;
 			}
+		}
+
+		if (Ast_Assign <= curr.type && curr.type <= Ast_Reinterpret){
 			CHECK_OPER_STACK_OVERFLOW(curr.pos);
 			opers[opers_size] = curr; opers_size += 1;
 			goto ExpectValue;
