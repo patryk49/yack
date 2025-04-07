@@ -244,6 +244,7 @@ void print_ast(AstArray ast){
 		case Ast_GetProcedure:
 		case Ast_Subscript:
 		case Ast_FieldSubscript:
+		case Ast_Initializer:
 			printf(": arg_count = %lu ", node.count);
 			break;
 		case Ast_StartScope:

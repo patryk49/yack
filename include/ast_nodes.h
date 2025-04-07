@@ -54,6 +54,7 @@
 	X(OpenProcedureClass, 140, 0, 1, 1), \
 	X(OpenBrace,           30, 0, 1, 1), \
 	X(OpenBlock,          255, 0, 1, 1), \
+	X(Initializer,        255, 0, 0, 1), \
 \
 /* BINARY ASSIGNMENTS */ \
 	X(Assign,             40, 40, 1, 1), \
@@ -140,7 +141,6 @@
 \
 /* AFTER PARSING */ \
 	X(ProcPointer, 255, 255, 0, 1), \
-	X(Initializer, 255, 255, 0, 1), \
 	X(GetClass,    255, 255, 0, 1), \
 	X(Nop,         255, 255, 1, 1), \
 	X(Error,       255, 255, 0, 1), \

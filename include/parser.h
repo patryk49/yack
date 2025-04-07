@@ -708,9 +708,9 @@ ExpectValue:{
 		}
 
 		case Ast_OpenBrace:
+			curr.type = Ast_Initializer;
 			if (it->type == Ast_EndScope){
 				it += 1;
-				curr.type = Ast_Initializer;
 				*res_it = curr; res_it += 1;
 				goto ExpectOperator;
 			}
@@ -743,6 +743,10 @@ ExpectValue:{
 				AstNode open_node = { .type = Ast_StartScope, .pos = it->pos };
 				it += 3;
 				AstNode open_oper = { .type = Ast_Procedure, .pos = res_it - tokens.data };
+				if (it->type == Ast_OpenBrace){
+					it += 1;
+					open_oper.type = Ast_StartScope;
+				}
 				opers[opers_size] = open_oper; opers_size += 1;
 				*res_it = open_node; res_it += 1;
 				goto ExpectValue;
@@ -932,6 +936,7 @@ ExpectValue:{
 		
 		case Ast_Call:
 		case Ast_GetProcedure:
+		case Ast_Initializer:
 			*res_it = sc; res_it += 1;
 			goto ExpectOperator;
 
@@ -959,6 +964,10 @@ ExpectValue:{
 			AstNode open_node = { .type = Ast_StartScope, .pos = (it-1)->pos };
 			it += 2;
 			AstNode open_oper = { .type = Ast_Procedure, .pos = res_it - tokens.data };
+			if (it->type == Ast_OpenBrace){
+				it += 1;
+				open_oper.type = Ast_StartScope;
+			}
 			opers[opers_size] = open_oper; opers_size += 1;
 			*res_it = open_node; res_it += 1;
 			goto ExpectValue;
@@ -1023,9 +1032,7 @@ ParseCharacter:{
 		it += 1;
 		c = *it;
 		switch (c){
-		case '\'':
-		case '\"':
-		case '\\':
+		case '\'': case '\"': case '\\':
 			break;
 		case '@': case '#': case '$': case '%': case '^': case '&': case '*':
 		case '(': case ')': case '[': case ']': case '{': case '}':
@@ -1116,14 +1123,12 @@ static uint64_t parse_number_hex(const char **src_it){
 	size_t res = 0;
 
 	for (;;){
-		char c = *src;
+		uint8_t c = *src;
 		if (is_number(c)){
 			res = (res << 4) | (c - '0');
-		} else{
-			if (c <= 'Z') c += 'a'-'A';
-			if ('a' > c || c > 'f') break;
+		} else if ('a' <= c && c <= 'f'){
 			res = (res << 4) | (10 + c - 'a');
-		}
+		} else break;
 		while (src+=1, *src == '_');
 	}
 
@@ -1183,14 +1188,16 @@ static enum AstType parse_number(void *res_data, const char **src_it){
 	
 	res_u64 = parse_number_dec(&src);
 	
-	if (*src == '.'){
+	if (*src == '.' && is_number(*(src+1))){
 		src += 1;
 		double res_f64 = (double)res_u64; // decimal part
 		const char *fraction_str = src;
 		uint64_t fraction_num = parse_number_dec(&src);
 		if (fraction_num != 0){
 			size_t fraction_width = 0;
-			for (; fraction_str!=src; fraction_str+=1){ fraction_width += *fraction_str != '_'; }
+			for (; fraction_str!=src; fraction_str+=1){
+				fraction_width += *fraction_str != '_';
+			}
 			double fraction_den = util_ipow_f64(10.0, fraction_width);
 			res_f64 += (double)fraction_num / fraction_den;
 		}
